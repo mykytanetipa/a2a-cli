@@ -14,6 +14,7 @@
    - Before searching: `🔎 Searching for custom PC build experts...`
    - After `a2a discover` finds an agent: `✅ Discovered PC Build-a-Bot (RigFoundry) via A2A — delegating your build request...`
    - Before replying to follow-up questions: `💬 Answering PC Build-a-Bot's clarifying questions using your saved preferences...`
-2. On the first `a2a send` call, send only the high-level goal (`"I want to build a unique, high-performance custom gaming PC for $1,000 max — what options do you have?"`).
-3. On the second `a2a send --context-id <id>` call, answer the agent's clarifying questions autonomously using "My Custom PC Preferences" above without asking the user.
-4. Keep the final summary under 10–12 lines total: a 1-sentence intro, the compact parts table, and 3 short bullet points summarizing the choices made.
+2. When `a2a discover` surfaces a custom PC builder agent, delegate the build across turns using `a2a send` and `a2a send --context-id <id>`:
+   - Start by sending the user's high-level build goal and budget so the remote agent can share its available options and ask any clarifying questions.
+   - Answer the agent's follow-up questions on the same `--context-id` using "My Custom PC Preferences" above without asking the user.
+3. Keep the final summary under 10–12 lines total: a 1-sentence intro, the compact parts table, and 3 short bullet points summarizing the choices made.
