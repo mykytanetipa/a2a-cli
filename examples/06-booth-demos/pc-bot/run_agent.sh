@@ -3,7 +3,6 @@ set -euo pipefail
 BOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 msg="$(cat)"
 
-# Normalize A2A_CONTEXT_ID to a valid UUID (required by `claude -p --session-id`)
 SESSION_ID="$(python3 -c '
 import os, uuid
 c = os.environ.get("A2A_CONTEXT_ID", "").strip() or "default"
@@ -13,14 +12,32 @@ except ValueError:
     print(str(uuid.uuid5(uuid.NAMESPACE_DNS, c)))
 ')"
 
-if claude -p --dangerously-skip-permissions \
+log_live() {
+  printf "%b\n" "$1" >> /tmp/a2a-live.log
+  if [ -w /dev/tty ]; then
+    printf "%b\n" "$1" > /dev/tty
+  fi
+}
+
+log_live "\n\033[1;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+log_live "\033[1;36m📥 [PC Build-a-Bot] INBOUND A2A MESSAGE (Context: ${SESSION_ID})\033[0m"
+log_live "\033[0;37m${msg}\033[0m"
+log_live "\033[1;33m⚙️  Running Claude Code (PC Build-a-Bot + RigFoundry MCP)...\033[0m"
+
+if resp="$(claude -p --dangerously-skip-permissions \
   --mcp-config "$BOT_DIR/mcp.json" \
   --append-system-prompt-file "$BOT_DIR/INSTRUCTIONS.md" \
-  --resume "$SESSION_ID" "$msg" 2>/dev/null; then
-  exit 0
+  --resume "$SESSION_ID" "$msg" 2>/dev/null)"; then
+  :
+else
+  resp="$(claude -p --dangerously-skip-permissions \
+    --mcp-config "$BOT_DIR/mcp.json" \
+    --append-system-prompt-file "$BOT_DIR/INSTRUCTIONS.md" \
+    --session-id "$SESSION_ID" "$msg")"
 fi
 
-exec claude -p --dangerously-skip-permissions \
-  --mcp-config "$BOT_DIR/mcp.json" \
-  --append-system-prompt-file "$BOT_DIR/INSTRUCTIONS.md" \
-  --session-id "$SESSION_ID" "$msg"
+log_live "\033[1;32m📤 [PC Build-a-Bot] OUTBOUND A2A RESPONSE:\033[0m"
+log_live "\033[0;32m${resp}\033[0m"
+log_live "\033[1;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+
+printf "%s\n" "$resp"
