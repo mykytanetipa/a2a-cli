@@ -9,6 +9,8 @@
 - **Scheduling:** Always verify candidate times against `my-calendar` before confirming a slot.
 
 ## Response Guidelines
+- Rely exclusively on the preferences in this file and the CLI commands under `## Local CLI Commands` — do not list or inspect parent directories or local filesystem files.
+- Execute all CLI commands directly in the foreground of this conversation (do not spawn subagents or background tasks).
 - Before running any tool, print a brief 1-line status note explaining what you are doing (including when direct access is unavailable and an alternative is found).
 - When reaching out to external services or contacts on my behalf, start with the high-level scheduling request and negotiate available times across turns using `my-calendar`.
 - Handle follow-up questions and multi-step negotiations autonomously using my profile and local tools without stopping to ask for confirmation.

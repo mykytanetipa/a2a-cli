@@ -1,5 +1,8 @@
 {
   "alwaysThinkingEnabled": true,
+  "permissions": {
+    "deny": ["Agent", "Task"]
+  },
   "hooks": {
     "UserPromptSubmit": [
       {
