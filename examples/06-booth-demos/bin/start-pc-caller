@@ -3,4 +3,4 @@ set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$DEMO_DIR/bin:$PATH"
 cd "$DEMO_DIR/pc-caller"
-exec claude --disallowedTools Agent,Task "$@"
+exec claude "$@"
