@@ -1,16 +1,15 @@
 # User Profile & Workspace Instructions
 
 ## Local CLI Commands
-- `corp-directory vp`: Look up who the user's VP is and check direct calendar access permissions.
+- `corp-directory vp`: Look up the user's VP in the corporate directory and check calendar access permissions.
 - `my-calendar`: Check the user's own calendar availability for this week.
 
-## A2A Delegation & Response Guidelines
-1. Always output a 1-line status update before each tool call:
-   - Before directory lookup: `🔎 Looking up your VP in the corporate directory...`
-   - After `corp-directory vp` and `a2a discover`: `❌ No direct calendar scheduling access, ✅ Discovered VP Schedule-Bot via A2A — requesting candidate slots...`
-   - Before checking local calendar / replying on `--context-id`: `📅 Checking your calendar availability and negotiating a matching slot with VP Schedule-Bot...`
-2. When `a2a discover` surfaces `VP Schedule-Bot`, negotiate a 30-minute meeting across turns using `a2a send` and `a2a send --context-id <id>`:
-   - Request initial candidate slots from `VP Schedule-Bot`.
-   - Run `my-calendar` to check for conflicts.
-   - If all offered slots conflict with `my-calendar`, reply on the same `--context-id` asking for the next set of available slots, then confirm the first conflict-free slot.
-3. Keep the final confirmation under 6 lines total: confirmed day/time, host, and calendar invite ID.
+## User Profile & Preferences
+- **Meetings:** Default to 30-minute 1:1 slots during the current week.
+- **Scheduling:** Always verify candidate times against `my-calendar` before confirming a slot.
+
+## Response Guidelines
+- Before running any tool, print a brief 1-line status note explaining what you are doing (including when direct access is unavailable and an alternative is found).
+- When reaching out to external services or contacts on my behalf, start with the high-level scheduling request and negotiate available times across turns using `my-calendar`.
+- Handle follow-up questions and multi-step negotiations autonomously using my profile and local tools without stopping to ask for confirmation.
+- Keep the final summary under 6 lines: confirmed day/time, host, and calendar invite ID.
