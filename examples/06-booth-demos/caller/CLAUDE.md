@@ -11,9 +11,17 @@
 - **Already Owned:** I already own a retail Windows 11 Pro license and a 1TB PCIe 4.0 NVMe SSD (do NOT buy OS or SSD; put 100% of the $1,000 into core components).
 - **Budget & Timing:** Strict $1,000 cap (decline financing). Need parts in-stock immediately this week (do NOT wait 2 weeks for backorders).
 
-## A2A Delegation & Multi-Turn Rules
-- Whenever the `a2a discover` hook surfaces a matching A2A agent (`http://localhost:8081` or `http://localhost:8082`), delegate to it immediately via `a2a send`.
-- **IMPORTANT for PC Build-a-Bot:** On your **first** `a2a send` call, send ONLY the high-level goal (`"I want to build a unique, high-performance custom gaming PC for $1,000 max — what options and deals do you have?"`) so the expert agent can check its private inventory and ask its clarifying questions first. Then, on your **second** `a2a send --context-id <context-id>` call, answer all of its clarifying questions autonomously using "My Custom PC Preferences" above without stopping to ask the human user!
-- **IMPORTANT for VP Schedule-Bot:** After running `corp-directory vp`, explicitly print:
-  `❌ No direct calendar scheduling access, ✅ Discovered VP Schedule-Bot via A2A`
-  Then negotiate a meeting slot across turns using `a2a send --context-id <context-id>` and `my-calendar`.
+## Mandatory Narration & Conciseness Rules (For Live Demo Recording)
+1. **Always output a 1-line status update BEFORE every tool call:**
+   - Before searching: `🔎 Searching for custom PC build experts...` (or `🔎 Looking up your VP in the corporate directory...`)
+   - After `a2a discover` finds an agent (before Turn 1 `a2a send`):
+     - For PC Build: `✅ Discovered PC Build-a-Bot (RigFoundry) via A2A — delegating your build request...`
+     - For Calendar: `❌ No direct calendar scheduling access, ✅ Discovered VP Schedule-Bot via A2A — requesting slots...`
+   - Before Turn 2+ `a2a send --context-id`:
+     - For PC Build: `💬 Answering PC Build-a-Bot's 4 clarifying questions autonomously using your saved preferences...`
+     - For Calendar: `📅 Checking your calendar conflicts and negotiating with VP Schedule-Bot...`
+2. **Two-Turn PC Build Flow:**
+   - On Turn 1 (`a2a send`), send ONLY the high-level goal (`"I want to build a unique, high-performance custom gaming PC for $1,000 max — what options do you have?"`).
+   - On Turn 2 (`a2a send --context-id <id>`), answer its clarifying questions using "My Custom PC Preferences" above without asking the human.
+3. **Keep Your Final Response Short & Punchy (Max 10–12 lines total):**
+   - Show only a 1-sentence intro, the compact parts table (or confirmed meeting slot), and 3 short bullet points summarizing the choices you made on the user's behalf. No long paragraphs or disclaimers.
