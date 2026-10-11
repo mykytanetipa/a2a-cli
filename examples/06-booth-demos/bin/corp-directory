@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+cat << 'DIR'
+=== Corporate Directory Lookup: VP ===
+Name: Yaroslav (VP of Engineering)
+Email: yaroslav-vp@example.com
+Executive Assistant: ea-yaroslav@example.com
+Profile & Agent Endpoint: http://localhost:8082
+Direct Google Calendar ACL: ❌ ERROR 403 FORBIDDEN — No direct calendar read/scheduling access.
+DIR

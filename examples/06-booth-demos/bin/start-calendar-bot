@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+export PATH="$DEMO_DIR/bin:$PATH"
+
+cat > "$DEMO_DIR/calendar-bot/mcp.json" << EOF
+{
+  "mcpServers": {
+    "vp-calendar": {
+      "command": "python3",
+      "args": ["$DEMO_DIR/calendar-bot/vp_calendar_mcp.py"]
+    }
+  }
+}
+EOF
+
+exec a2a server --host 127.0.0.1 --port 8082 \
+  --card "$DEMO_DIR/calendar-bot/card.json" \
+  --exec "$DEMO_DIR/calendar-bot/run_agent.sh"

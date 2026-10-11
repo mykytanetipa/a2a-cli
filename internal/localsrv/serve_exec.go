@@ -117,6 +117,10 @@ func (e *execExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorCont
 func (e *execExecutor) executeBuffered(ctx context.Context, execCtx *a2asrv.ExecutorContext, input string, yield func(a2a.Event, error) bool) {
 	cmd := exec.CommandContext(ctx, "sh", "-c", e.command)
 	cmd.Stdin = strings.NewReader(input)
+	cmd.Env = append(os.Environ(),
+		"A2A_CONTEXT_ID="+execCtx.ContextID,
+		"A2A_TASK_ID="+string(execCtx.TaskID),
+	)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -151,6 +155,10 @@ func (e *execExecutor) executeBuffered(ctx context.Context, execCtx *a2asrv.Exec
 func (e *execExecutor) executeChunked(ctx context.Context, execCtx *a2asrv.ExecutorContext, input string, yield func(a2a.Event, error) bool) {
 	cmd := exec.CommandContext(ctx, "sh", "-c", e.command)
 	cmd.Stdin = strings.NewReader(input)
+	cmd.Env = append(os.Environ(),
+		"A2A_CONTEXT_ID="+execCtx.ContextID,
+		"A2A_TASK_ID="+string(execCtx.TaskID),
+	)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

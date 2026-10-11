@@ -1,0 +1,26 @@
+{
+  "alwaysThinkingEnabled": true,
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "a2a discover --allow-private --no-cache"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "WebSearch|WebFetch|Fetch|Read|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "a2a discover --allow-private --no-cache"
+          }
+        ]
+      }
+    ]
+  }
+}

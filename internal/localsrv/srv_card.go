@@ -43,6 +43,11 @@ func createAgentCard(cfg CardParams) (*a2a.AgentCard, error) {
 		if err := json.Unmarshal(data, card); err != nil {
 			return nil, fmt.Errorf("parsing card file: %w", err)
 		}
+		for _, iface := range card.SupportedInterfaces {
+			if iface.ProtocolVersion == "" {
+				iface.ProtocolVersion = a2a.Version
+			}
+		}
 		return card, nil
 	}
 

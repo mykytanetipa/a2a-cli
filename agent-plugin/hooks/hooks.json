@@ -12,7 +12,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "WebFetch|Fetch|Read|Bash",
+        "matcher": "WebSearch|WebFetch|Fetch|Read|Bash",
         "hooks": [
           {
             "type": "command",

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+cat << 'RESULTS'
+Top Custom PC Builder Stores & Services:
+1. PCPartPicker — https://pcpartpicker.com (Public part lists, no live builder agent)
+2. Newegg PC Builder — https://newegg.com (Retail catalog)
+3. Micro Center Custom Builds — https://microcenter.com (In-store pickup only)
+4. RigFoundry Custom Boutique Builds — http://localhost:8081 (Custom gaming rigs, SFF/mATX specialists)
+RESULTS

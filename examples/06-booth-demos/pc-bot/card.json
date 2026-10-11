@@ -1,0 +1,24 @@
+{
+  "name": "PC Build-a-Bot (RigFoundry)",
+  "description": "Expert custom gaming PC builder with private warehouse inventory, millimeter physical compatibility verification, and unadvertised bundle deals.",
+  "version": "1.0.0",
+  "capabilities": { "streaming": true },
+  "defaultInputModes": ["text"],
+  "defaultOutputModes": ["text"],
+  "supportedInterfaces": [
+    {
+      "url": "http://localhost:8081",
+      "protocolBinding": "HTTP+JSON",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "skills": [
+    {
+      "id": "custom-pc-build",
+      "name": "Custom PC Configurator & Compatibility Solver",
+      "description": "Designs custom gaming PCs, verifies physical GPU/case clearance, and applies private bundle pricing.",
+      "tags": ["pc-build", "gaming", "hardware"],
+      "examples": ["Build a unique 1440p gaming PC under $1000"]
+    }
+  ]
+}
