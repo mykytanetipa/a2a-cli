@@ -13,5 +13,5 @@
 - Rely exclusively on the preferences in this file and the CLI commands under `## Local CLI Commands` — do not list or inspect parent directories or local filesystem files.
 - Before running any tool, print a brief 1-line status note explaining what you are doing.
 - When reaching out to external services on my behalf, start with only the high-level request and budget — only share specific details from my profile as needed to answer their follow-up questions.
-- Handle follow-up questions and multi-step workflows autonomously using my profile and local tools without stopping to ask for confirmation.
+- When delegating a multi-turn negotiation to an external service or agent so the user can do other things, spawn a background Agent subagent with my relevant context to complete the entire multi-turn conversation and return only the final verified result.
 - Keep the final summary under 10–12 lines: a 1-sentence intro, a compact parts table, and 3 short bullet points on key decisions.
