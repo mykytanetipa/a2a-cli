@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+WORKER_DIR="$DEMO_DIR/pc-worker"
+
+echo "🚀 Deploying Demo 1 PC Stores & A2A Agent to Cloudflare Workers..."
+cd "$WORKER_DIR"
+
+deploy_worker() {
+  local name="$1"
+  echo "──► Deploying $name..." >&2
+  local out
+  out="$(npx --yes wrangler deploy --name "$name" 2>&1)"
+  echo "$out" >&2
+  local url
+  url="$(echo "$out" | grep -Eo 'https://[a-zA-Z0-9._-]+\.workers\.dev' | tail -n 1)"
+  echo "$url"
+}
+
+RIGFOUNDRY_URL="$(deploy_worker "rigfoundry")"
+MOCKEGG_URL="$(deploy_worker "mockegg")"
+
+cat > "$WORKER_DIR/.deployed-urls.env" << EOF
+RIGFOUNDRY_URL="${RIGFOUNDRY_URL}"
+MOCKEGG_URL="${MOCKEGG_URL}"
+EOF
+
+echo ""
+echo "✅ Demo 1 Cloudflare Workers deployed and saved to pc-worker/.deployed-urls.env:"
+echo "   • RigFoundry (HTML + A2A Bot): ${RIGFOUNDRY_URL}"
+echo "   • MockEgg (HTML Retail Only):  ${MOCKEGG_URL}"

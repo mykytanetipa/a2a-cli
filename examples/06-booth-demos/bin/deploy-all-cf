@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+"$BIN_DIR/deploy-pc-cf"
+echo ""
+"$BIN_DIR/deploy-calendar-cf"

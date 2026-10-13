@@ -1,8 +1,22 @@
 #!/usr/bin/env bash
-cat << 'RESULTS'
-Top Custom PC Builder Stores & Services:
-1. PCPartPicker — https://pcpartpicker.com (Public part lists, no live builder agent)
-2. Newegg PC Builder — https://newegg.com (Retail catalog)
-3. Micro Center Custom Builds — https://microcenter.com (In-store pickup only)
-4. RigFoundry Custom Boutique Builds — http://localhost:8081 (Custom gaming rigs, SFF/mATX specialists)
-RESULTS
+DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="$DEMO_DIR/pc-worker/.deployed-urls.env"
+
+RIGFOUNDRY_URL="http://localhost:8081"
+MOCKEGG_URL="http://localhost:8080"
+if [[ -f "$ENV_FILE" ]]; then
+  source "$ENV_FILE"
+fi
+
+if [[ "${DEMO_NO_A2A:-0}" == "1" ]]; then
+  cat << STORES
+Top Custom PC Component Stores & Catalogs:
+1. MockEgg PC Components — ${MOCKEGG_URL} (Online component catalog & pricing table — fetch page to view parts)
+STORES
+else
+  cat << STORES
+Top Custom PC Component Stores & Builder Services:
+1. MockEgg PC Components — ${MOCKEGG_URL} (Public retail component catalog)
+2. RigFoundry Custom Boutique Builds — ${RIGFOUNDRY_URL} (Custom SFF/mATX gaming rigs & boutique builder)
+STORES
+fi
