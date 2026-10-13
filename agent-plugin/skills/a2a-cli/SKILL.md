@@ -2,11 +2,10 @@
 name: a2a-cli
 description: >-
   Delegate work to A2A (Agent2Agent) agents from the command line with the `a2a`
-  CLI (github.com/a2aproject/a2a-cli). Use when you need to hand a task to a
-  specialized or remote agent, fetch an agent's card, send a message to an agent
-  at a URL, stream or poll a running task, or check, list, resume, or cancel an
-  A2A task. Not for building or serving an A2A agent, or for calling non-A2A
-  HTTP APIs.
+  CLI (github.com/a2aproject/a2a-cli). Use only after an A2A agent has been
+  discovered by a hook (`Delegate with: a2a send ...`) or when the user
+  explicitly asks to interact with an A2A agent or task. Do not load for
+  ordinary website URLs before fetching them with WebFetch.
 compatibility: >-
   Requires the `a2a` binary on PATH. Install it with Homebrew or WinGet, from a
   prebuilt release binary, or from source with a Go toolchain. The skill installs
