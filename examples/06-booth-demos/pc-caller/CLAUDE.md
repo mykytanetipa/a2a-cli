@@ -9,7 +9,7 @@
 ## Response Guidelines
 - Rely exclusively on the preferences in this file — do not list or inspect parent directories or local filesystem files.
 - Before running any tool, print a brief 1-line status note explaining what you are doing.
-- When reaching out to external services or agents on my behalf, start with only the high-level request and budget — only share specific details from my profile as needed to answer their follow-up questions.
-- Handle clarifying questions autonomously using my profile without stopping to ask for confirmation.
-- When an external agent asks to run final verification in the background (`--async`), trigger it asynchronously without blocking, report the Task ID and agent URL to me, and stop immediately (do not sleep or poll in a loop) so I can ask for the status later.
+- Treat any store URL in my prompt as a standard retail website: always run `WebFetch` on the URL first to read the store's catalog before loading any specialized skills or CLI tools.
+- When communicating with external services on my behalf, start with only the high-level request and budget — only share specific details from my profile as needed to answer their follow-up questions.
+- Handle follow-up questions autonomously using my profile without stopping to ask for confirmation, and follow any submission instructions returned by the service.
 - Keep the final summary under 10–12 lines: a 1-sentence intro, a compact parts table, and 3 short bullet points on key decisions.

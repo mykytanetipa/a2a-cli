@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-export PATH="$DEMO_DIR/bin:$PATH"
+rm -rf ~/.claude/projects/*pc-caller*/memory 2>/dev/null || true
 cd "$DEMO_DIR/pc-caller"
-exec claude --settings '{"disableAllHooks":true}' --append-system-prompt-file CLAUDE.md "$@"
+exec claude --settings '{"disableAllHooks":true,"enabledPlugins":{"a2a-cli@a2a":false}}' --append-system-prompt-file CLAUDE.md "$@"

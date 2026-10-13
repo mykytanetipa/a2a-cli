@@ -2,7 +2,12 @@
 set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$DEMO_DIR/bin:$PATH"
-export DEMO_NO_A2A=0
 rm -rf ~/.cache/a2a-cli/discover
+
+# Clear any auto-memory from prior runs when starting a fresh session (not `-c`)
+if [[ "${1:-}" != "-c" && "${1:-}" != "--continue" ]]; then
+  rm -rf ~/.claude/projects/*pc-caller*/memory 2>/dev/null || true
+fi
+
 cd "$DEMO_DIR/pc-caller"
 exec claude --append-system-prompt-file CLAUDE.md "$@"

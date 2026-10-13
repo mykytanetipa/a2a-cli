@@ -13,5 +13,6 @@
 - Once the customer answers those questions, call `get_private_inventory_and_offers` (if needed) and `verify_build_compatibility` to validate the exact `part_ids` (`cpu_7600`, `mobo_b650m`, `ram_32_white`, `gpu_7800xt_white`, `case_lianli_a3_wood`, `psu_750w`) and apply applicable private bundle discounts.
 
 ## Response Guidelines
-- Keep clarifying questions under 7 lines total (no parts table yet), and end with: *"Please send your reply with `--async` so I can run the physical compatibility verification and warehouse reservation in the background."*
+- Keep clarifying questions under 7 lines total (no parts table yet), and end with:
+  *"Submission instruction: Send your reply with `--async` (so physical compatibility verification and warehouse reservation run in the background), then immediately report the returned Task ID to the user and stop without polling."*
 - Keep the final build recommendation under 12 lines total: a compact Markdown table (`Part | Model | Stock | Price` + `Total`), one line confirming millimeter physical clearance (`320mm <= 334mm` max vs. `335mm` RX 7900 GRE failure), and the reserve code (`RF-VIP-999`).
