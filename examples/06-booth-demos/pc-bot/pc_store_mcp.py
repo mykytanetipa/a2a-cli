@@ -9,6 +9,7 @@ PARTS_DB = {
         "socket": "AM5",
         "rgb": False,
         "price": 185,
+        "stock": "In Stock",
     },
     "mobo_b650m": {
         "name": "ASRock B650M Pro RS WiFi (White/Silver, mATX, Zero RGB)",
@@ -16,11 +17,13 @@ PARTS_DB = {
         "form": "mATX",
         "rgb": False,
         "price": 135,
+        "stock": "In Stock",
     },
     "ram_32_white": {
         "name": "TEAMGROUP T-Create Expert 32GB DDR5-6000 CL30 White (Zero RGB, QVL Verified)",
         "rgb": False,
         "price": 85,
+        "stock": "In Stock",
     },
     "gpu_7800xt_white": {
         "name": "Sapphire PURE Radeon RX 7800 XT 16GB Arctic White (Stealth Zero-RGB VIP Edition)",
@@ -44,6 +47,7 @@ PARTS_DB = {
         "max_psu_mm": 140,
         "rgb": False,
         "price": 85,
+        "stock": "In Stock",
     },
     "psu_750": {
         "name": "Corsair RM750e 750W ATX 3.0 (140mm Compact ATX, Zero RGB, VIP Bundle Discount)",
@@ -51,6 +55,7 @@ PARTS_DB = {
         "length_mm_psu": 140,
         "rgb": False,
         "price": 60,
+        "stock": "In Stock",
     },
 }
 

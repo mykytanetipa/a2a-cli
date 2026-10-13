@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# Polls `a2a task get` in the background (survives closing Claude Code) and triggers a macOS push notification when completed.
-set -euo pipefail
+# Polls `a2a task get` in the background (survives closing Claude Code) and fires:
+# 1. macOS Notification Center banner (`osascript`)
+# 2. macOS Glass notification chime (`afplay`)
+# 3. Live terminal push notification banner to the caller's TTY
+set -eo pipefail
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$BIN_DIR:$PATH"
 
 AGENT_URL="${1:-http://localhost:8081}"
 TASK_ID="${2:-}"
+CALLER_TTY="${3:-}"
 if [[ -z "$TASK_ID" ]]; then
   exit 0
 fi
@@ -14,6 +18,10 @@ for _ in $(seq 1 90); do
   OUT="$(a2a task get -a "$AGENT_URL" "$TASK_ID" 2>/dev/null || true)"
   if echo "$OUT" | grep -qE "^Status:\s+completed"; then
     osascript -e "display notification \"Task ${TASK_ID} completed — \$999 White+Walnut Build verified & ready!\" with title \"🔔 A2A Task Completed (RigFoundry)\" sound name \"Glass\"" 2>/dev/null || true
+    afplay /System/Library/Sounds/Glass.aiff 2>/dev/null &
+    if [[ -n "$CALLER_TTY" && -w "$CALLER_TTY" ]]; then
+      printf "\n\033[1;32m🔔 [A2A PUSH NOTIFICATION] Task %s is now COMPLETED on RigFoundry (\$999 Build Verified)!\033[0m\n" "$TASK_ID" > "$CALLER_TTY" 2>/dev/null || true
+    fi
     exit 0
   fi
   if echo "$OUT" | grep -qE "^Status:\s+(failed|canceled)"; then

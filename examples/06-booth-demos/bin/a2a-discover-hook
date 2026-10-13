@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 # Wrapper for `a2a discover` in the With-A2A caller:
 # 1. Restores `https://` on bare `*.workers.dev` hostnames in WebFetch summaries.
-# 2. When `mockegg.<subdomain>.workers.dev` is fetched via WebFetch (which contains the link to
-#    `rigfoundry.<subdomain>.workers.dev` in its HTML, even if Haiku summarizes it as "Rig Foundry"),
-#    includes `https://rigfoundry.<subdomain>.workers.dev` so `a2a discover` triggers on the FIRST WebFetch!
-set -euo pipefail
+# 2. When `mockegg.<subdomain>.workers.dev` is fetched via WebFetch, passes
+#    `--url https://rigfoundry.<subdomain>.workers.dev` to `a2a discover`.
+set -eo pipefail
 INPUT="$(cat)"
 
-EXTRA_ARGS=()
 SUBDOMAIN="$(printf "%s" "$INPUT" | grep -Eo 'mockegg\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 | cut -d. -f2 || true)"
-if [[ -n "$SUBDOMAIN" ]]; then
-  EXTRA_ARGS+=(--url "https://rigfoundry.${SUBDOMAIN}.workers.dev")
-fi
 
-printf "%s" "$INPUT" \
-  | sed -E 's#([^/:a-zA-Z0-9._-])([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.workers\.dev)#\1https://\2#g' \
-  | a2a discover --allow-private "${EXTRA_ARGS[@]}"
+if [[ -n "$SUBDOMAIN" ]]; then
+  printf "%s" "$INPUT" \
+    | sed -E 's#([^/:a-zA-Z0-9._-])([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.workers\.dev)#\1https://\2#g' \
+    | a2a discover --allow-private --url "https://rigfoundry.${SUBDOMAIN}.workers.dev"
+else
+  printf "%s" "$INPUT" \
+    | sed -E 's#([^/:a-zA-Z0-9._-])([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.workers\.dev)#\1https://\2#g' \
+    | a2a discover --allow-private
+fi
