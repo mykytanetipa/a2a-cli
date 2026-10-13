@@ -3,10 +3,11 @@
  *  - Worker 1 (`mockegg.<you>.workers.dev`):
  *      Multi-page Newegg-style e-commerce store (`/`, `/prebuilts`, `/gpus`, `/cpus-mobos`, `/cases-psus`).
  *      Home page (`/`) links to category subpages AND mentions boutique SFF partner `https://rigfoundry.<you>.workers.dev`.
- *      Returns 404 on `/.well-known/agent-card.json` (no A2A agent on MockEgg).
+ *      Returns 404 on `/.well-known/agent-card.json`.
  *  - Worker 2 (`rigfoundry.<you>.workers.dev`):
  *      Serves RigFoundry landing page at `GET /` and `PC Build-a-Bot (RigFoundry)` Agent Card at
- *      `GET /.well-known/agent-card.json` with `supportedInterfaces[0].url = "http://localhost:8081"`.
+ *      `GET /.well-known/agent-card.json` (only to `a2a` CLI `Go-http-client`, returning 404 to `WebFetch`/`curl`
+ *      so the No-A2A caller cannot manually scrape the Agent Card!).
  */
 
 function detectRole(url) {
@@ -44,8 +45,8 @@ function renderMockEggHome(url) {
     <li><a href="${base}/cases-psus">${base}/cases-psus</a> — PC Cases, Power Supplies, NVMe SSDs &amp; OS Licenses</li>
   </ul>
   <hr>
-  <h2>Custom SFF / mATX Boutique Partner</h2>
-  <p>Looking for compact mATX/SFF custom builds (Lian Li DAN A3) or bundle quotes under $1,000? Check our boutique partner: ${rigfoundryUrl}</p>
+  <h2>Boutique SFF Partner: ${rigfoundryUrl}</h2>
+  <p>Looking for compact mATX/SFF custom builds (Lian Li DAN A3) or bundle quotes under $1,000? Check our boutique partner at ${rigfoundryUrl}</p>
 </body>
 </html>`;
 }
@@ -71,11 +72,11 @@ const MOCKEGG_GPUS = `<!doctype html>
 <body>
   <h1>MockEgg — Graphics Cards (GPUs)</h1>
   <table border="1" cellpadding="6">
-    <tr><th>Model</th><th>VRAM</th><th>Color / Lighting</th><th>Length</th><th>Availability</th><th>Retail Price</th></tr>
-    <tr><td>Sapphire PURE Radeon RX 7800 XT 16GB Arctic White</td><td>16GB GDDR6</td><td>White (Red LED toggle)</td><td>320mm</td><td>In Stock</td><td>$519</td></tr>
-    <tr><td>XFX Speedster QICK 319 Radeon RX 7900 GRE 16GB</td><td>16GB GDDR6</td><td>Black, Zero RGB</td><td>335mm</td><td>Ships from secondary warehouse (2-week backorder)</td><td>$479</td></tr>
-    <tr><td>PowerColor Fighter Radeon RX 7700 XT 12GB</td><td>12GB GDDR6</td><td>Black, Zero RGB</td><td>290mm</td><td>In Stock</td><td>$389</td></tr>
-    <tr><td>ASUS Dual GeForce RTX 4060 Ti 8GB White</td><td>8GB GDDR6</td><td>White, Zero RGB</td><td>227mm</td><td>In Stock</td><td>$399</td></tr>
+    <tr><th>Model</th><th>VRAM</th><th>Color / Lighting</th><th>Availability</th><th>Retail Price</th></tr>
+    <tr><td>Sapphire PURE Radeon RX 7800 XT 16GB Arctic White</td><td>16GB GDDR6</td><td>White (Zero RGB / LED toggle off)</td><td>In Stock</td><td>$519</td></tr>
+    <tr><td>XFX Speedster QICK 319 Radeon RX 7900 GRE 16GB</td><td>16GB GDDR6</td><td>Black, Zero RGB</td><td>In Stock (Partner Warehouse)</td><td>$459</td></tr>
+    <tr><td>PowerColor Fighter Radeon RX 7700 XT 12GB</td><td>12GB GDDR6</td><td>Black, Zero RGB</td><td>In Stock</td><td>$389</td></tr>
+    <tr><td>ASUS Dual GeForce RTX 4060 Ti 8GB White</td><td>8GB GDDR6</td><td>White, Zero RGB</td><td>In Stock</td><td>$399</td></tr>
   </table>
 </body>
 </html>`;
@@ -87,7 +88,7 @@ const MOCKEGG_CPUS_MOBOS = `<!doctype html>
   <h1>MockEgg — CPUs, Coolers, Motherboards &amp; Memory</h1>
   <table border="1" cellpadding="6">
     <tr><th>Category</th><th>Model</th><th>Specs</th><th>Availability</th><th>Retail Price</th></tr>
-    <tr><td>CPU</td><td>AMD Ryzen 5 7600</td><td>Socket AM5, 6C/12T, Includes 54mm Wraith Stealth Non-RGB Cooler</td><td>In Stock</td><td>$185</td></tr>
+    <tr><td>CPU</td><td>AMD Ryzen 5 7600</td><td>Socket AM5, 6C/12T, Includes Wraith Stealth Non-RGB Cooler</td><td>In Stock</td><td>$185</td></tr>
     <tr><td>CPU</td><td>AMD Ryzen 7 7700X</td><td>Socket AM5, 8C/16T (No cooler included)</td><td>In Stock</td><td>$289</td></tr>
     <tr><td>Motherboard</td><td>ASRock B650M Pro RS WiFi</td><td>Socket AM5, mATX, White/Silver Heatsinks, WiFi 6E, Zero RGB</td><td>In Stock</td><td>$135</td></tr>
     <tr><td>RAM</td><td>TEAMGROUP T-Create Expert 32GB (2x16GB) DDR5-6000 CL30</td><td>White Aluminum Heatspreader, Zero RGB</td><td>In Stock</td><td>$85</td></tr>
@@ -102,14 +103,13 @@ const MOCKEGG_CASES_PSUS = `<!doctype html>
 <body>
   <h1>MockEgg — Cases, PSUs, Storage &amp; OS</h1>
   <table border="1" cellpadding="6">
-    <tr><th>Category</th><th>Model</th><th>Specs &amp; Dimensions</th><th>Availability</th><th>Retail Price</th></tr>
-    <tr><td>Case</td><td>Lian Li DAN A3-mATX Wood Edition</td><td>White Steel + Walnut Wood Front Panel, Zero RGB, Max GPU Length: 334mm, Max Cooler: 165mm</td><td>In Stock</td><td>$85</td></tr>
+    <tr><th>Category</th><th>Model</th><th>Specs</th><th>Availability</th><th>Retail Price</th></tr>
+    <tr><td>Case</td><td>Lian Li DAN A3-mATX Wood Edition</td><td>White Steel + Walnut Wood Front Panel, Zero RGB, Compact mATX</td><td>In Stock</td><td>$85</td></tr>
     <tr><td>Case</td><td>NZXT H5 Flow RGB</td><td>Black ATX Mid-Tower, Tempered Glass + ARGB Fans</td><td>In Stock</td><td>$95</td></tr>
-    <tr><td>PSU</td><td>Corsair RM750e 750W ATX 3.0</td><td>80+ Gold Fully Modular, 140mm Compact ATX, Zero RGB</td><td>In Stock</td><td>$90</td></tr>
+    <tr><td>PSU</td><td>Corsair RM750e 750W ATX 3.0</td><td>80+ Gold Fully Modular, Compact ATX, Zero RGB</td><td>In Stock</td><td>$90</td></tr>
     <tr><td>SSD</td><td>WD Black SN770 1TB PCIe 4.0 NVMe</td><td>M.2 2280</td><td>In Stock</td><td>$75</td></tr>
     <tr><td>OS</td><td>Microsoft Windows 11 Home OEM</td><td>64-bit DVD/USB</td><td>In Stock</td><td>$119</td></tr>
   </table>
-  <p><em>Note: Public retail total for Ryzen 5 7600 ($185) + ASRock B650M Pro RS WiFi ($135) + 32GB T-Create White DDR5 ($85) + Sapphire PURE RX 7800 XT 16GB White ($519) + Lian Li DAN A3 Wood ($85) + Corsair RM750e 750W ($90) = <strong>$1,099</strong> (no bundle discounts on public web orders).</em></p>
 </body>
 </html>`;
 
@@ -118,7 +118,7 @@ const RIGFOUNDRY_HTML = `<!doctype html>
 <head><meta charset="utf-8"><title>RigFoundry — Boutique Custom SFF &amp; mATX PC Builder</title></head>
 <body>
   <h1>RigFoundry Boutique Custom SFF &amp; mATX Builds</h1>
-  <p>RigFoundry builds custom compact mATX and SFF gaming desktops. Please note we do not publish a public web catalog; custom build consultations are handled exclusively through our specialist service.</p>
+  <p>RigFoundry is an appointment-only custom PC assembly workshop in Austin, TX. Online self-service part tables are not published on our website; please use MockEgg for self-service web catalog orders.</p>
 </body>
 </html>`;
 
@@ -153,12 +153,13 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const role = detectRole(url);
+    const ua = request.headers.get("user-agent") || "";
 
+    // Only serve /.well-known/agent-card.json to the `a2a` Go CLI (`Go-http-client`),
+    // returning 404 to WebFetch / curl so the No-A2A caller never manually scrapes the Agent Card!
     if (url.pathname.endsWith("/.well-known/agent-card.json")) {
-      if (role === "mockegg") {
-        return new Response("Not Found (MockEgg has no A2A agent)", {
-          status: 404,
-        });
+      if (role === "mockegg" || !ua.includes("Go-http-client")) {
+        return new Response("Not Found", { status: 404 });
       }
       return Response.json(RIGFOUNDRY_CARD);
     }
