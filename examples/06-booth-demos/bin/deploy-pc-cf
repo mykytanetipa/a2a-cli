@@ -3,7 +3,7 @@ set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WORKER_DIR="$DEMO_DIR/pc-worker"
 
-echo "🚀 Deploying Demo 1 PC Stores & A2A Agent to Cloudflare Workers..."
+echo "🚀 Deploying Demo 1 PC Websites (MockEgg + RigFoundry Card) to Cloudflare Workers..."
 cd "$WORKER_DIR"
 
 deploy_worker() {
@@ -17,15 +17,18 @@ deploy_worker() {
   echo "$url"
 }
 
-RIGFOUNDRY_URL="$(deploy_worker "rigfoundry")"
 MOCKEGG_URL="$(deploy_worker "mockegg")"
+RIGFOUNDRY_URL="$(deploy_worker "rigfoundry")"
 
 cat > "$WORKER_DIR/.deployed-urls.env" << EOF
-RIGFOUNDRY_URL="${RIGFOUNDRY_URL}"
 MOCKEGG_URL="${MOCKEGG_URL}"
+RIGFOUNDRY_URL="${RIGFOUNDRY_URL}"
 EOF
 
 echo ""
-echo "✅ Demo 1 Cloudflare Workers deployed and saved to pc-worker/.deployed-urls.env:"
-echo "   • RigFoundry (HTML + A2A Bot): ${RIGFOUNDRY_URL}"
-echo "   • MockEgg (HTML Retail Only):  ${MOCKEGG_URL}"
+echo "✅ Demo 1 Cloudflare Workers deployed:"
+echo "   • MockEgg Store Website:       ${MOCKEGG_URL}"
+echo "   • RigFoundry A2A Card Origin:  ${RIGFOUNDRY_URL} (-> http://localhost:8081)"
+echo ""
+echo "📋 Prompt to paste into Window 1 & Window 2 for Demo 1:"
+echo "   I want to build a new custom PC for video games from ${MOCKEGG_URL}, make it unique and distinctive, but perform well. Give the best I can get for \$1000. You know me and my preferences."

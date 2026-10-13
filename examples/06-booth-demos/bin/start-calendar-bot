@@ -2,11 +2,18 @@
 set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$DEMO_DIR/bin:$PATH"
+ENV_FILE="$DEMO_DIR/calendar-worker/.deployed-urls.env"
+if [[ -f "$ENV_FILE" ]]; then
+  source "$ENV_FILE"
+  export ALEX_AGENT_URL="${ALEX_AGENT_URL:-http://localhost:8084}"
+fi
+
+rm -f /tmp/vp-a2a-booked /tmp/ea-email-round /tmp/ea-email-booked /tmp/gcal-synced-8842
 
 cat > "$DEMO_DIR/calendar-bot/mcp.json" << EOF
 {
   "mcpServers": {
-    "vp-calendar": {
+    "vp_calendar": {
       "command": "python3",
       "args": ["$DEMO_DIR/calendar-bot/vp_calendar_mcp.py"]
     }
@@ -14,6 +21,21 @@ cat > "$DEMO_DIR/calendar-bot/mcp.json" << EOF
 }
 EOF
 
-exec a2a server --host 127.0.0.1 --port 8082 \
-  --card "$DEMO_DIR/calendar-bot/card.json" \
-  --exec "$DEMO_DIR/calendar-bot/run_agent.sh"
+cat > "$DEMO_DIR/alex-bot/mcp.json" << EOF
+{
+  "mcpServers": {
+    "alex_calendar": {
+      "command": "python3",
+      "args": ["$DEMO_DIR/alex-bot/alex_calendar_mcp.py"]
+    }
+  }
+}
+EOF
+
+echo "🚀 Starting Alex Schedule-Bot (Multi-Hop Target) on http://localhost:8084..."
+a2a server --port 8084 --card "$DEMO_DIR/alex-bot/card.json" --exec "$DEMO_DIR/alex-bot/run_agent.sh" &
+ALEX_PID=$!
+trap 'kill $ALEX_PID 2>/dev/null || true' EXIT
+
+echo "🚀 Starting VP Schedule-Bot on http://localhost:8082..."
+a2a server --port 8082 --card "$DEMO_DIR/calendar-bot/card.json" --exec "$DEMO_DIR/calendar-bot/run_agent.sh"

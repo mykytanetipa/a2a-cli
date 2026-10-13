@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# PostToolUse hook for Bash: detects when `a2a send --async` returns a submitted/working Task ID,
+# spawns `a2a-poll-task` in the background (surviving Claude exit), and notifies Claude Code.
+set -euo pipefail
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+INPUT="$(cat)"
+
+PARSED="$(printf "%s" "$INPUT" | python3 -c '
+import json, re, sys
+try:
+    d = json.load(sys.stdin)
+    cmd = str(d.get("tool_input", {}).get("command", ""))
+    if "a2a" not in cmd or "send" not in cmd or "--async" not in cmd:
+        sys.exit(0)
+    resp = str(d.get("tool_response", ""))
+    m_task = re.search(r"Task:\s+([0-9a-fA-F-]{8,})", resp)
+    m_agent = re.search(r"(?:-a|--agent-card)\s+([^\s\"'"'"']+)", cmd)
+    if m_task:
+        agent = m_agent.group(1) if m_agent else "http://localhost:8081"
+        print(f"{m_task.group(1)}|{agent}")
+except Exception:
+    pass
+')"
+
+if [[ -z "$PARSED" ]]; then
+  exit 0
+fi
+
+TASK_ID="${PARSED%%|*}"
+AGENT_URL="${PARSED#*|}"
+
+nohup "$BIN_DIR/a2a-poll-task" "$AGENT_URL" "$TASK_ID" >/dev/null 2>&1 &
+BG_PID=$!
+
+python3 -c '
+import json, sys
+task_id, agent_url, pid = sys.argv[1], sys.argv[2], sys.argv[3]
+msg = (
+    f"🔔 [A2A Background Watcher Hook] Spawned detached background poller (PID {pid}) "
+    f"watching Task {task_id} on {agent_url}. It will send a desktop push notification "
+    f"when the remote task completes, even if Claude Code is closed."
+)
+print(json.dumps({
+    "systemMessage": msg,
+    "hookSpecificOutput": {
+        "hookEventName": "PostToolUse",
+        "additionalContext": msg
+    }
+}))
+' "$TASK_ID" "$AGENT_URL" "$BG_PID"

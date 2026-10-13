@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
-DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="$DEMO_DIR/calendar-worker/.deployed-urls.env"
-
 BOOKED=""
 if [[ "${DEMO_NO_A2A:-0}" == "1" ]]; then
   if [[ -f /tmp/ea-email-booked ]]; then
     BOOKED="📅 BOOKED: 1:1 with VP Sarah Chen (Confirmed via EA email)"
   fi
-elif [[ -f "$ENV_FILE" ]]; then
-  source "$ENV_FILE"
-  STATE="$(curl -s "${VP_AGENT_URL}/calendar-state" 2>/dev/null || echo '{}')"
-  if echo "$STATE" | grep -q '"Thursday 15:30-16:00"'; then
+else
+  if [[ -f /tmp/vp-a2a-booked ]]; then
     BOOKED="📅 BOOKED: 1:1 with Yaroslav, VP of Engineering [Invite: CAL-INV-8842]"
   fi
 fi

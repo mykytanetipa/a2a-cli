@@ -2,7 +2,5 @@
 set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$DEMO_DIR/bin:$PATH"
-export DEMO_NO_A2A=1
-rm -rf ~/.cache/a2a-cli/discover
 cd "$DEMO_DIR/pc-caller"
-exec claude --append-system-prompt-file CLAUDE.md "$@"
+exec claude --settings '{"disableAllHooks":true}' --append-system-prompt-file CLAUDE.md "$@"

@@ -1,12 +1,11 @@
 {
-  "alwaysThinkingEnabled": true,
   "hooks": {
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "a2a discover --allow-private --no-cache"
+            "command": "a2a discover --allow-private"
           }
         ]
       }
@@ -17,7 +16,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "a2a discover --allow-private --no-cache"
+            "command": "a2a discover --allow-private"
+          },
+          {
+            "type": "command",
+            "command": "a2a-watch-hook"
           }
         ]
       }

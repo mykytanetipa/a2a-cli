@@ -1,0 +1,26 @@
+{
+  "name": "Alex Schedule-Bot (Director of Platform)",
+  "description": "Personal calendar scheduling agent for Director Alex. Handles internal meeting rescheduling requests from peer A2A agents.",
+  "version": "1.0.0",
+  "capabilities": { "streaming": true },
+  "defaultInputModes": ["text"],
+  "defaultOutputModes": ["text"],
+  "supportedInterfaces": [
+    {
+      "url": "http://localhost:8084",
+      "protocolBinding": "HTTP+JSON",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "skills": [
+    {
+      "id": "reschedule-internal-sync",
+      "name": "Internal Sync Rescheduler",
+      "description": "Checks Director Alex's calendar and moves movable internal 1:1 meetings to open slots.",
+      "tags": ["calendar", "reschedule", "a2a"],
+      "examples": [
+        "Can we move our Thursday 15:30-16:00 Weekly Sync to Friday 11:00-11:30?"
+      ]
+    }
+  ]
+}
