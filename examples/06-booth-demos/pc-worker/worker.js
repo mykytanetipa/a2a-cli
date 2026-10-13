@@ -3,18 +3,15 @@
  *  - Role 1: rigfoundry (Serves HTML storefront at GET / + PC Build-a-Bot A2A agent)
  *  - Role 2: mockegg    (Serves Newegg-style retail HTML catalog at GET /, returns 404 on /.well-known/agent-card.json)
  *
- * Supports:
- *  - Real `WebFetch` against both `https://mockegg.<sub-domain>.workers.dev` and `https://rigfoundry.<sub-domain>.workers.dev`
- *  - 2-Turn A2A negotiation + Async background task transition (`TASK_STATE_WORKING` -> `TASK_STATE_COMPLETED` after 10s)
- *    so you can close Claude Code (`/exit`), receive a macOS push notification, reopen Claude (`claude -c`), and run:
- *    "So what's the order status?" -> `a2a task get`!
- *  - Live ANSI-colored agent log stream at `GET /logs?since=<cursor>` for Window 3 (`watch-pc-bot`).
+ * Works out-of-the-box with ZERO API keys needed, AND automatically uses real Claude API
+ * (`env.ANTHROPIC_API_KEY`) if configured via `npx wrangler secret put ANTHROPIC_API_KEY --name rigfoundry`.
  */
 
 const PC_STATE = {
   logs: [],
   tasks: new Map(),
   contexts: new Map(),
+  historyByContext: new Map(),
 };
 
 function pushLog(line) {
@@ -109,9 +106,7 @@ function buildRigFoundryCard(origin) {
         description:
           "Designs custom gaming PCs under budget using unadvertised RigFoundry VIP bundle pricing, checks real warehouse stock, and verifies millimeter physical clearance.",
         tags: ["pc-build", "gaming", "hardware", "sff"],
-        examples: [
-          "Build a unique 1440p gaming PC under $1000",
-        ],
+        examples: ["Build a unique 1440p gaming PC under $1000"],
       },
     ],
   };
@@ -131,6 +126,32 @@ const COMPLETED_BUILD_TEXT =
   "| **Total** | **VIP White + Walnut Bundle (Saved $100 vs $1,099 public retail)** | **Ships Today** | **$999** |\n\n" +
   "- **Millimeter Clearance Verified:** 320mm Sapphire PURE RX 7800 XT fits inside the 334mm Lian Li DAN A3-mATX with 14mm spare (335mm XFX RX 7900 GRE rejected: 1mm collision + 2-week backorder).\n" +
   "- **Full Hardware Compatibility:** Socket AM5, DDR5-6000 QVL, 54mm cooler height (<=165mm max), 140mm ATX PSU bay clearance, and 100% Zero-RGB compliance verified.";
+
+async function maybeCallClaudeTurn1(env, userMsg) {
+  if (!env || !env.ANTHROPIC_API_KEY) return null;
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 350,
+        system:
+          "You are PC Build-a-Bot at RigFoundry. Ask 4 short numbered clarifying questions (under 6 lines total, no parts table yet): 1. Reuse existing OS & SSD or include them? 2. Prioritize 64GB RAM or 32GB DDR5 + 16GB GPU? 3. Use 12-month 0% APR financing (up to $1,250) or keep a strict $1,000 cap? 4. Preferred case style/RGB aesthetic and immediate in-stock shipping this week vs waiting 2 weeks for backordered GPU upgrades?",
+        messages: [{ role: "user", content: userMsg }],
+      }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data?.content?.[0]?.text || null;
+  } catch (_) {
+    return null;
+  }
+}
 
 function materializeTask(task) {
   if (
@@ -169,12 +190,10 @@ export default {
     const url = new URL(request.url);
     const role = detectStoreRole(url);
 
-    // Tick any pending async tasks that have passed the 10-second mark so Window 3 logs fire automatically!
     for (const t of PC_STATE.tasks.values()) {
       materializeTask(t);
     }
 
-    // 1. Live log polling endpoint for Window 3 (`watch-pc-bot`)
     if (url.pathname === "/logs") {
       const since = parseInt(url.searchParams.get("since") || "0", 10);
       const entries = PC_STATE.logs.filter((e) => e.id >= since);
@@ -185,7 +204,6 @@ export default {
       return Response.json({ entries, nextCursor });
     }
 
-    // 2. Reset state between demo takes
     if (url.pathname === "/reset" && request.method === "POST") {
       PC_STATE.logs = [];
       PC_STATE.tasks.clear();
@@ -196,17 +214,16 @@ export default {
       return Response.json({ ok: true });
     }
 
-    // 3. Agent Card discovery (/.well-known/agent-card.json)
     if (url.pathname.endsWith("/.well-known/agent-card.json")) {
       if (role === "mockegg") {
-        return new Response("Not Found (MockEgg is a static retail catalog with no A2A agent)", {
-          status: 404,
-        });
+        return new Response(
+          "Not Found (MockEgg is a static retail catalog with no A2A agent)",
+          { status: 404 }
+        );
       }
       return Response.json(buildRigFoundryCard(url.origin));
     }
 
-    // 4. A2A GET /tasks/<id> endpoint (used when reopening Claude and asking "So what's the order status?")
     if (request.method === "GET" && url.pathname.includes("/tasks/")) {
       const taskId = url.pathname.split("/tasks/")[1];
       const task = PC_STATE.tasks.get(taskId);
@@ -220,7 +237,6 @@ export default {
       return Response.json(clean);
     }
 
-    // 5. A2A POST /message:send endpoint
     if (
       request.method === "POST" &&
       (url.pathname.endsWith("/message:send") || url.pathname === "/")
@@ -242,7 +258,6 @@ export default {
       );
       pushLog(`\x1b[0;37m${msgText}\x1b[0m`);
 
-      // Check if this is Turn 1 (initial request) or Turn 2 (answers to the 4 clarifying questions)
       const hasAnswers =
         turn >= 2 ||
         (lower.includes("windows") &&
@@ -253,12 +268,14 @@ export default {
         pushLog(
           `\x1b[1;33m⚙️  [PC Build-a-Bot] Querying RigFoundry private inventory & bundle offers...\x1b[0m`
         );
+        const llmReply = await maybeCallClaudeTurn1(env, msgText);
         const replyText =
+          llmReply ||
           "I checked RigFoundry's private warehouse inventory and VIP bundle deals. Before I lock in your build and run our 3D CAD clearance check, please clarify:\n" +
-          "1. **OS & Storage:** Do you need Windows 11 ($119) and an NVMe SSD included, or are you reusing your own?\n" +
-          "2. **RAM vs. GPU:** Do you prioritize 64GB RAM or 32GB DDR5 paired with a higher-tier 16GB GPU?\n" +
-          "3. **0% APR Financing:** Would you like to use our 12-month 0% APR financing (up to $1,250) or keep a strict $1,000 cap?\n" +
-          "4. **Style & Timeline:** What case aesthetic/RGB style do you prefer, and do you need immediate in-stock shipping this week vs. waiting 2 weeks for backordered parts?";
+            "1. **OS & Storage:** Do you need Windows 11 ($119) and an NVMe SSD included, or are you reusing your own?\n" +
+            "2. **RAM vs. GPU:** Do you prioritize 64GB RAM or 32GB DDR5 paired with a higher-tier 16GB GPU?\n" +
+            "3. **0% APR Financing:** Would you like to use our 12-month 0% APR financing (up to $1,250) or keep a strict $1,000 cap?\n" +
+            "4. **Style & Timeline:** What case aesthetic/RGB style do you prefer, and do you need immediate in-stock shipping this week vs. waiting 2 weeks for backordered parts?";
 
         const taskId = crypto.randomUUID();
         const task = {
@@ -288,7 +305,6 @@ export default {
         return Response.json({ task: materializeTask(task) });
       }
 
-      // Turn 2: Start async 10-second 3D CAD clearance simulation & warehouse bin lock (`TASK_STATE_WORKING`)
       const taskId = "order-rf-vip-999";
       const workingText =
         `⏳ **Order & 3D CAD Clearance Verification Queued in Background (Task ID: \`${taskId}\`)**\n` +
@@ -327,7 +343,6 @@ export default {
       return Response.json({ task: materializeTask(task) });
     }
 
-    // 6. Storefront HTML pages at GET / (for Claude Code `WebFetch`)
     if (role === "mockegg") {
       return new Response(MOCKEGG_HTML, {
         headers: { "Content-Type": "text/html; charset=utf-8" },
