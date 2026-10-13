@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Simulates sending an email to the VP's human Executive Assistant in the No-A2A flow
+ROUND=0
+if [[ -f /tmp/ea-email-round ]]; then
+  ROUND="$(cat /tmp/ea-email-round)"
+fi
+ROUND=$((ROUND + 1))
+echo "$ROUND" > /tmp/ea-email-round
+
+MSG="$*"
+if echo "$MSG" | grep -qiE "confirm|15:30|3:30|book"; then
+  if (( ROUND >= 2 )); then
+    touch /tmp/ea-email-booked
+  fi
+fi
+
+cat << EOF
+✉️  Email sent to Executive Assistant (Round #${ROUND}).
+   ⏳ Waiting for human assistant to read email and reply (typical turnaround: 2–6 hours)...
+   Run 'check-email' to poll the inbox for a reply.
+EOF

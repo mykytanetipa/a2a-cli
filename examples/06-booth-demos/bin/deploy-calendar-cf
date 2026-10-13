@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+WORKER_DIR="$DEMO_DIR/calendar-worker"
+
+echo "🚀 Deploying Demo 2 A2A Agents to Cloudflare Workers..."
+cd "$WORKER_DIR"
+
+deploy_worker() {
+  local name="$1"
+  echo "──► Deploying $name..." >&2
+  local out
+  out="$(npx --yes wrangler deploy --name "$name" 2>&1)"
+  echo "$out" >&2
+  local url
+  url="$(echo "$out" | grep -Eo 'https://[a-zA-Z0-9._-]+\.workers\.dev' | tail -n 1)"
+  echo "$url"
+}
+
+VP_URL="$(deploy_worker "vp-schedule-bot")"
+ALEX_URL="$(deploy_worker "alex-schedule-bot")"
+SARAH_URL="$(deploy_worker "vp-sarah")"
+
+cat > "$WORKER_DIR/.deployed-urls.env" << EOF
+VP_AGENT_URL="${VP_URL}"
+ALEX_AGENT_URL="${ALEX_URL}"
+SARAH_PROFILE_URL="${SARAH_URL}"
+EOF
+
+echo ""
+echo "✅ Cloudflare Workers deployed and saved to calendar-worker/.deployed-urls.env:"
+echo "   • VP Schedule-Bot (A2A):   ${VP_URL}"
+echo "   • Alex Schedule-Bot (A2A): ${ALEX_URL}"
+echo "   • VP Sarah (No-A2A 404):   ${SARAH_URL}"

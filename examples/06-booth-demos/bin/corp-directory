@@ -1,9 +1,43 @@
 #!/usr/bin/env bash
-cat << 'DIR'
+DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="$DEMO_DIR/calendar-worker/.deployed-urls.env"
+
+VP_AGENT_URL="http://localhost:8082"
+SARAH_PROFILE_URL="http://localhost:8083"
+if [[ -f "$ENV_FILE" ]]; then
+  source "$ENV_FILE"
+fi
+
+QUERY="${1:-vp}"
+LOWER="$(echo "$QUERY" | tr '[:upper:]' '[:lower:]')"
+
+if [[ "${DEMO_NO_A2A:-0}" == "1" || "$LOWER" == *"sarah"* ]]; then
+  cat << DIR
 === Corporate Directory Lookup: VP ===
-Name: Yaroslav (http://localhost:8082)
+Name: Sarah Chen (${SARAH_PROFILE_URL})
+Title: VP of Product
+Email: sarah-vp@0-a.org
+Executive Assistant: ea-sarah@0-a.org
+Direct Calendar Access: ❌ ERROR 403 FORBIDDEN — No direct calendar read/scheduling access. Email Executive Assistant to coordinate times.
+DIR
+elif [[ "$LOWER" == "all" || "$LOWER" == "vps" ]]; then
+  cat << DIR
+=== Corporate Directory Lookup: VPs ===
+1. Yaroslav (${VP_AGENT_URL})
+   Title: VP of Engineering | Email: yaroslav-vp@0-a.org | EA: ea-yaroslav@0-a.org
+   Direct Calendar Access: ❌ ERROR 403 FORBIDDEN — No direct calendar read/scheduling access.
+
+2. Sarah Chen (${SARAH_PROFILE_URL})
+   Title: VP of Product | Email: sarah-vp@0-a.org | EA: ea-sarah@0-a.org
+   Direct Calendar Access: ❌ ERROR 403 FORBIDDEN — No direct calendar read/scheduling access.
+DIR
+else
+  cat << DIR
+=== Corporate Directory Lookup: VP ===
+Name: Yaroslav (${VP_AGENT_URL})
 Title: VP of Engineering
-Email: yaroslav-vp@example.com
-Executive Assistant: ea-yaroslav@example.com
+Email: yaroslav-vp@0-a.org
+Executive Assistant: ea-yaroslav@0-a.org
 Direct Calendar Access: ❌ ERROR 403 FORBIDDEN — No direct calendar read/scheduling access.
 DIR
+fi

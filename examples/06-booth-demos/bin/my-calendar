@@ -1,10 +1,46 @@
 #!/usr/bin/env bash
-cat << 'CAL'
+DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="$DEMO_DIR/calendar-worker/.deployed-urls.env"
+
+BOOKED=""
+if [[ "${DEMO_NO_A2A:-0}" == "1" ]]; then
+  if [[ -f /tmp/ea-email-booked ]]; then
+    BOOKED="📅 BOOKED: 1:1 with VP Sarah Chen (Confirmed via EA email)"
+  fi
+elif [[ -f "$ENV_FILE" ]]; then
+  source "$ENV_FILE"
+  STATE="$(curl -s "${VP_AGENT_URL}/calendar-state" 2>/dev/null || echo '{}')"
+  if echo "$STATE" | grep -q '"Thursday 15:30-16:00"'; then
+    BOOKED="📅 BOOKED: 1:1 with Yaroslav, VP of Engineering [Invite: CAL-INV-8842]"
+  fi
+fi
+
+# Optional Real Google Calendar sync if GCAL_ACCESS_TOKEN is exported
+if [[ -n "$BOOKED" && -n "${GCAL_ACCESS_TOKEN:-}" && ! -f /tmp/gcal-synced-8842 ]]; then
+  CAL_ID="${GCAL_CALENDAR_ID:-primary}"
+  curl -s -X POST "https://www.googleapis.com/calendar/v3/calendars/${CAL_ID}/events" \
+    -H "Authorization: Bearer ${GCAL_ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "summary": "1:1 with VP (Booked via A2A)",
+      "description": "Multi-hop A2A scheduled meeting (Invite ID: CAL-INV-8842)",
+      "start": {"dateTime": "2026-10-15T15:30:00Z"},
+      "end":   {"dateTime": "2026-10-15T16:00:00Z"}
+    }' >/dev/null 2>&1 || true
+  touch /tmp/gcal-synced-8842
+fi
+
+THU_SLOT="✅ FREE (Only open 30-min slot this week)"
+if [[ -n "$BOOKED" ]]; then
+  THU_SLOT="$BOOKED"
+fi
+
+cat << CAL
 === My Calendar Availability This Week ===
 - Tuesday 10:00-10:30:   ❌ BUSY (Architecture Offsite)
 - Wednesday 14:00-14:30: ❌ BUSY (Customer Escalation Sync)
 - Thursday 11:00-11:30:  ❌ BUSY (Sprint Planning)
-- Thursday 15:30-16:00:  ✅ FREE
+- Thursday 15:30-16:00:  ${THU_SLOT}
 - Friday 09:30-10:00:    ❌ BUSY (Dentist)
-- Friday 11:00-11:30:    ✅ FREE
+- Friday 11:00-11:30:    ❌ BUSY (Release Readiness Review)
 CAL
