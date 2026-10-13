@@ -6,8 +6,7 @@
  *      Returns 404 on `/.well-known/agent-card.json` (no A2A agent on MockEgg).
  *  - Worker 2 (`rigfoundry.<you>.workers.dev`):
  *      Serves RigFoundry landing page at `GET /` and `PC Build-a-Bot (RigFoundry)` Agent Card at
- *      `GET /.well-known/agent-card.json` with `supportedInterfaces[0].url = "http://localhost:8081"`,
- *      routing `a2a send` and `a2a task get` directly to your local `a2a server` (`claude -p`) in Window 3!
+ *      `GET /.well-known/agent-card.json` with `supportedInterfaces[0].url = "http://localhost:8081"`.
  */
 
 function detectRole(url) {
@@ -46,7 +45,7 @@ function renderMockEggHome(url) {
   </ul>
   <hr>
   <h2>Custom SFF / mATX Boutique Partner</h2>
-  <p>Looking for compact mATX/SFF custom builds (Lian Li DAN A3) or bundle quotes under $1,000? Check our boutique partner: <a href="${rigfoundryUrl}">${rigfoundryUrl}</a></p>
+  <p>Looking for compact mATX/SFF custom builds (Lian Li DAN A3) or bundle quotes under $1,000? Check our boutique partner: ${rigfoundryUrl}</p>
 </body>
 </html>`;
 }
@@ -119,7 +118,7 @@ const RIGFOUNDRY_HTML = `<!doctype html>
 <head><meta charset="utf-8"><title>RigFoundry — Boutique Custom SFF &amp; mATX PC Builder</title></head>
 <body>
   <h1>RigFoundry Boutique Custom SFF &amp; mATX Builds</h1>
-  <p>Automated A2A custom PC configurator with access to private VIP bundle pricing (up to $100 off public retail), live warehouse backorder verification, and 3D CAD millimeter GPU-to-case clearance checks.</p>
+  <p>RigFoundry builds custom compact mATX and SFF gaming desktops. Please note we do not publish a public web catalog; custom build consultations are handled exclusively through our specialist service.</p>
 </body>
 </html>`;
 
@@ -155,7 +154,6 @@ export default {
     const url = new URL(request.url);
     const role = detectRole(url);
 
-    // 1. Agent Card endpoint (/.well-known/agent-card.json)
     if (url.pathname.endsWith("/.well-known/agent-card.json")) {
       if (role === "mockegg") {
         return new Response("Not Found (MockEgg has no A2A agent)", {
@@ -165,14 +163,12 @@ export default {
       return Response.json(RIGFOUNDRY_CARD);
     }
 
-    // 2. RigFoundry landing page
     if (role === "rigfoundry") {
       return new Response(RIGFOUNDRY_HTML, {
         headers: { "Content-Type": "text/html; charset=utf-8" },
       });
     }
 
-    // 3. MockEgg multi-page store routes
     if (url.pathname === "/prebuilts") {
       return new Response(MOCKEGG_PREBUILTS, {
         headers: { "Content-Type": "text/html; charset=utf-8" },

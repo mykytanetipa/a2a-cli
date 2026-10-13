@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "a2a discover --allow-private"
+            "command": "a2a-discover-hook"
           },
           {
             "type": "command",

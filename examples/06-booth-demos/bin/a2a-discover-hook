@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Wrapper for `a2a discover`: Claude Code's WebFetch summarizer often strips `https://` from URLs
+# in its Markdown summary (e.g. writing `(rigfoundry.foo.workers.dev)` instead of `https://rigfoundry.foo.workers.dev`).
+# This restores `https://` before piping to `a2a discover` so discovery triggers on the very first WebFetch!
+set -euo pipefail
+sed -E 's#([^/:a-zA-Z0-9._-])([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.workers\.dev)#\1https://\2#g' | a2a discover --allow-private
