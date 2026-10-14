@@ -65,11 +65,6 @@ async function cacheGetJson(keyUrl) {
   return await res.json();
 }
 
-/**
- * Extends `@a2a-js/sdk/server`'s `InMemoryTaskStore` with Cloudflare's shared
- * `caches.default` so tasks created via `a2a send --async` in Isolate A are
- * immediately visible to `a2a task push-config create` and `a2a task get` in Isolate B.
- */
 class EdgeSharedTaskStore extends InMemoryTaskStore {
   constructor(namespace) {
     super();
@@ -96,17 +91,10 @@ class EdgeSharedTaskStore extends InMemoryTaskStore {
   }
 }
 
-/**
- * Extends `@a2a-js/sdk/server`'s `InMemoryPushNotificationStore` with Cloudflare's
- * shared `caches.default` AND rewrites `127.0.0.1:19081/webhook` to the active
- * tunnel's `/webhook` route so `@a2a-js/sdk`'s `DefaultPushNotificationSender`
- * delivers webhooks across isolates to the user's local machine.
- */
 class EdgeSharedPushNotificationStore extends InMemoryPushNotificationStore {
-  constructor(namespace, getUpstreamUrl) {
+  constructor(namespace) {
     super();
     this.namespace = namespace;
-    this.getUpstreamUrl = getUpstreamUrl;
   }
 
   _key(taskId) {
@@ -128,18 +116,7 @@ class EdgeSharedPushNotificationStore extends InMemoryPushNotificationStore {
     if (Array.isArray(cached) && cached.length > 0) {
       configs = cached.map((c) => TaskPushNotificationConfig.fromJSON(c));
     }
-    const upstream = await this.getUpstreamUrl();
-    if (!upstream) return configs;
-    return configs.map((c) => {
-      if (
-        c.url &&
-        (c.url.includes("127.0.0.1:19081") || c.url.includes("localhost:19081"))
-      ) {
-        const base = upstream.replace(/\/+(alex|vp)?\/?$/, "");
-        return { ...c, url: `${base}/webhook` };
-      }
-      return c;
-    });
+    return configs;
   }
 
   async loadWithMetadata(taskId, context) {
@@ -149,25 +126,16 @@ class EdgeSharedPushNotificationStore extends InMemoryPushNotificationStore {
   }
 }
 
-/**
- * `AgentExecutor` implementation powered by `@a2a-js/sdk/client` (`ClientFactory` +
- * `RestTransportFactory`).
- */
-class TunnelBridgeAgentExecutor {
-  constructor(getUpstreamUrl, registerBackgroundPromise, fallbackFn) {
-    this.getUpstreamUrl = getUpstreamUrl;
+class FallbackAgentExecutor {
+  constructor(registerBackgroundPromise, fallbackFn) {
     this.registerBackgroundPromise = registerBackgroundPromise;
     this.fallbackFn = fallbackFn;
-    this.cancelledTasks = new Set();
   }
 
-  async cancelTask(taskId, _eventBus) {
-    this.cancelledTasks.add(taskId);
-  }
+  async cancelTask(_taskId, _eventBus) {}
 
   async execute(requestContext, eventBus) {
     const { taskId, contextId, userMessage, task: existingTask } = requestContext;
-
     const initialTask = existingTask ?? {
       id: taskId,
       contextId,
@@ -183,7 +151,6 @@ class TunnelBridgeAgentExecutor {
 
     const runPromise = (async () => {
       await new Promise((r) => setTimeout(r, 50));
-
       eventBus.publish(
         AgentEvent.statusUpdate({
           taskId,
@@ -196,51 +163,13 @@ class TunnelBridgeAgentExecutor {
         })
       );
 
-      let replyText = "";
-      const upstreamUrl = await this.getUpstreamUrl();
-
-      if (upstreamUrl) {
-        const baseResolver = new DefaultAgentCardResolver();
-        const tunnelResolver = {
-          async resolve(baseUrl, path) {
-            const card = await baseResolver.resolve(baseUrl, path);
-            card.supportedInterfaces = [
-              {
-                url: upstreamUrl,
-                protocolBinding: "HTTP+JSON",
-                tenant: "",
-                protocolVersion: A2A_PROTOCOL_VERSION,
-              },
-            ];
-            return card;
-          },
-        };
-        const factory = new ClientFactory(
-          ClientFactoryOptions.createFrom(ClientFactoryOptions.default, {
-            transports: [new RestTransportFactory(), new JsonRpcTransportFactory()],
-            cardResolver: tunnelResolver,
-          })
-        );
-        const client = await factory.createFromUrl(upstreamUrl);
-        const upstreamRes = await client.sendMessage({
-          message: {
-            messageId: crypto.randomUUID(),
-            role: userMessage.role,
-            parts: userMessage.parts,
-            contextId,
-            taskId: undefined,
-            referenceTaskIds: [],
-            extensions: [],
-            metadata: {},
-          },
-        });
-        replyText = extractTextFromSendMessageResult(upstreamRes);
-      } else if (this.fallbackFn) {
-        const userText = extractTextFromMessage(userMessage);
-        replyText = await this.fallbackFn(userText, contextId, taskId);
-      } else {
-        throw new Error("No upstream local agent tunnel registered.");
-      }
+      const userText = (userMessage?.parts || [])
+        .map((p) => p?.content?.value ?? p?.text ?? "")
+        .filter(Boolean)
+        .join("\n");
+      const replyText = this.fallbackFn
+        ? await this.fallbackFn(userText, contextId, taskId)
+        : "No upstream tunnel connected.";
 
       eventBus.publish(
         AgentEvent.artifactUpdate({
@@ -280,38 +209,37 @@ class TunnelBridgeAgentExecutor {
       );
     })();
 
-    this.registerBackgroundPromise(
-      runPromise.then(
-        () => new Promise((r) => setTimeout(r, 2000)),
-        () => new Promise((r) => setTimeout(r, 2000))
-      )
-    );
-
+    this.registerBackgroundPromise(runPromise);
     await runPromise;
   }
 }
 
-function extractTextFromMessage(msg) {
-  if (!msg?.parts) return "";
-  return msg.parts
-    .map((p) => p?.content?.value ?? p?.text ?? "")
-    .filter(Boolean)
-    .join("\n");
-}
-
-function extractTextFromSendMessageResult(res) {
-  if (!res) return "";
-  if ("parts" in res && Array.isArray(res.parts)) {
-    return extractTextFromMessage(res);
-  }
-  if ("artifacts" in res && Array.isArray(res.artifacts)) {
-    return res.artifacts
-      .flatMap((a) => a.parts || [])
-      .map((p) => p?.content?.value ?? p?.text ?? "")
-      .filter(Boolean)
-      .join("\n");
-  }
-  return "";
+/**
+ * Builds an `@a2a-js/sdk/client` `Client` connected to the upstream local `a2a server` tunnel.
+ */
+async function createUpstreamSdkClient(upstreamUrl) {
+  const baseResolver = new DefaultAgentCardResolver();
+  const tunnelResolver = {
+    async resolve(baseUrl, path) {
+      const card = await baseResolver.resolve(baseUrl, path);
+      card.supportedInterfaces = [
+        {
+          url: upstreamUrl,
+          protocolBinding: "HTTP+JSON",
+          tenant: "",
+          protocolVersion: A2A_PROTOCOL_VERSION,
+        },
+      ];
+      return card;
+    },
+  };
+  const factory = new ClientFactory(
+    ClientFactoryOptions.createFrom(ClientFactoryOptions.default, {
+      transports: [new RestTransportFactory(), new JsonRpcTransportFactory()],
+      cardResolver: tunnelResolver,
+    })
+  );
+  return await factory.createFromUrl(upstreamUrl);
 }
 
 export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbackFn }) {
@@ -355,13 +283,9 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
   });
 
   const taskStore = new EdgeSharedTaskStore(namespace);
-  const pushStore = new EdgeSharedPushNotificationStore(namespace, getUpstreamUrl);
+  const pushStore = new EdgeSharedPushNotificationStore(namespace);
   const pushSender = new DefaultPushNotificationSender(pushStore, { timeout: 10000 });
-  const executor = new TunnelBridgeAgentExecutor(
-    getUpstreamUrl,
-    registerBackgroundPromise,
-    fallbackFn
-  );
+  const executor = new FallbackAgentExecutor(registerBackgroundPromise, fallbackFn);
 
   const requestHandler = new DefaultRequestHandler(
     dynamicCard,
@@ -386,6 +310,7 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
       return Response.json({ ok: true, upstreamUrl });
     }
 
+    // 1. Agent Card served via `@a2a-js/sdk` `DefaultRequestHandler.getAgentCard()` + `AgentCard.toJSON`
     if (request.method === "GET" && url.pathname.endsWith("/.well-known/agent-card.json")) {
       const card = await requestHandler.getAgentCard();
       return Response.json(AgentCard.toJSON(card));
@@ -405,13 +330,20 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
     try {
       const card = await requestHandler.getAgentCard();
       validateVersion(callContext.requestedVersion, card, "HTTP+JSON");
+      const liveUpstream = await getUpstreamUrl();
 
+      // 2. HTTP+JSON REST: POST /message:send
       if (request.method === "POST" && url.pathname === "/message:send") {
         const raw = await request.json();
         const params = SendMessageRequest.fromJSON(raw ?? {});
-        const result = await requestHandler.sendMessage(params, callContext);
-        if ("id" in result && result.id) {
-          await taskStore.save(result, callContext);
+        let result;
+        if (liveUpstream) {
+          // Forward via `@a2a-js/sdk/client` to the upstream local `a2a server`
+          // (supports both blocking and `returnImmediately: true` `--async` without hitting Cloudflare's 30s waitUntil cap!)
+          const client = await createUpstreamSdkClient(liveUpstream);
+          result = await client.sendMessage(params);
+        } else {
+          result = await requestHandler.sendMessage(params, callContext);
         }
         const protoPayload =
           "messageId" in result
@@ -423,6 +355,86 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
         });
       }
 
+      // 3. HTTP+JSON REST: GET /tasks/:taskId
+      const taskMatch = url.pathname.match(/^\/tasks\/([^/:]+)$/);
+      if (request.method === "GET" && taskMatch) {
+        const taskId = decodeURIComponent(taskMatch[1]);
+        const historyLength = url.searchParams.has("historyLength")
+          ? Number(url.searchParams.get("historyLength"))
+          : undefined;
+        const task = liveUpstream
+          ? await (await createUpstreamSdkClient(liveUpstream)).getTask({
+              id: taskId,
+              historyLength,
+              tenant: "",
+            })
+          : await requestHandler.getTask({ id: taskId, historyLength, tenant: "" }, callContext);
+        return new Response(JSON.stringify(Task.toJSON(task)), {
+          status: HTTP_STATUS.OK,
+          headers: { "Content-Type": A2A_CONTENT_TYPE },
+        });
+      }
+
+      // 4. HTTP+JSON REST: POST & GET /tasks/:taskId/pushNotificationConfigs
+      const pushListMatch = url.pathname.match(/^\/tasks\/([^/:]+)\/pushNotificationConfigs$/);
+      if (pushListMatch) {
+        const taskId = decodeURIComponent(pushListMatch[1]);
+        if (request.method === "POST") {
+          const raw = await request.json();
+          const cfg = TaskPushNotificationConfig.fromJSON({ ...(raw ?? {}), taskId });
+          if (!cfg.id) {
+            cfg.id = crypto.randomUUID();
+          }
+          const created = liveUpstream
+            ? await (await createUpstreamSdkClient(liveUpstream)).createTaskPushNotificationConfig(
+                cfg
+              )
+            : await requestHandler.createTaskPushNotificationConfig(cfg, callContext);
+          return new Response(JSON.stringify(TaskPushNotificationConfig.toJSON(created)), {
+            status: HTTP_STATUS.OK,
+            headers: { "Content-Type": A2A_CONTENT_TYPE },
+          });
+        }
+        if (request.method === "GET") {
+          const list = liveUpstream
+            ? await (await createUpstreamSdkClient(liveUpstream)).listTaskPushNotificationConfigs({
+                taskId,
+                pageSize: 0,
+                pageToken: "",
+                tenant: "",
+              })
+            : await requestHandler.listTaskPushNotificationConfigs(
+                { taskId, pageSize: 0, pageToken: "", tenant: "" },
+                callContext
+              );
+          return new Response(
+            JSON.stringify(ListTaskPushNotificationConfigsResponse.toJSON(list)),
+            {
+              status: HTTP_STATUS.OK,
+              headers: { "Content-Type": A2A_CONTENT_TYPE },
+            }
+          );
+        }
+      }
+
+      // 5. HTTP+JSON REST: POST /tasks/:taskId:cancel
+      const cancelMatch = url.pathname.match(/^\/tasks\/([^/:]+):cancel$/);
+      if (request.method === "POST" && cancelMatch) {
+        const taskId = decodeURIComponent(cancelMatch[1]);
+        const task = liveUpstream
+          ? await (await createUpstreamSdkClient(liveUpstream)).cancelTask({
+              id: taskId,
+              tenant: "",
+              metadata: {},
+            })
+          : await requestHandler.cancelTask({ id: taskId, tenant: "", metadata: {} }, callContext);
+        return new Response(JSON.stringify(Task.toJSON(task)), {
+          status: HTTP_STATUS.OK,
+          headers: { "Content-Type": A2A_CONTENT_TYPE },
+        });
+      }
+
+      // 6. HTTP+JSON REST: POST /message:stream
       if (request.method === "POST" && url.pathname === "/message:stream") {
         const raw = await request.json();
         const params = SendMessageRequest.fromJSON(raw ?? {});
@@ -445,107 +457,6 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
         })();
         registerBackgroundPromise(pump);
         return new Response(readable, { status: HTTP_STATUS.OK, headers: SSE_HEADERS });
-      }
-
-      const taskMatch = url.pathname.match(/^\/tasks\/([^/:]+)$/);
-      if (request.method === "GET" && taskMatch) {
-        const taskId = decodeURIComponent(taskMatch[1]);
-        const historyLength = url.searchParams.has("historyLength")
-          ? Number(url.searchParams.get("historyLength"))
-          : undefined;
-        const task = await requestHandler.getTask(
-          { id: taskId, historyLength, tenant: "" },
-          callContext
-        );
-        return new Response(JSON.stringify(Task.toJSON(task)), {
-          status: HTTP_STATUS.OK,
-          headers: { "Content-Type": A2A_CONTENT_TYPE },
-        });
-      }
-
-      if (request.method === "GET" && url.pathname === "/tasks") {
-        const listRes = await requestHandler.listTasks(
-          {
-            tenant: "",
-            contextId: url.searchParams.get("contextId") || "",
-            status: 0,
-            pageToken: url.searchParams.get("pageToken") || "",
-            includeArtifacts: url.searchParams.get("includeArtifacts") === "true",
-          },
-          callContext
-        );
-        return new Response(JSON.stringify(ListTasksResponse.toJSON(listRes)), {
-          status: HTTP_STATUS.OK,
-          headers: { "Content-Type": A2A_CONTENT_TYPE },
-        });
-      }
-
-      const cancelMatch = url.pathname.match(/^\/tasks\/([^/:]+):cancel$/);
-      if (request.method === "POST" && cancelMatch) {
-        const taskId = decodeURIComponent(cancelMatch[1]);
-        const task = await requestHandler.cancelTask(
-          { id: taskId, tenant: "", metadata: {} },
-          callContext
-        );
-        return new Response(JSON.stringify(Task.toJSON(task)), {
-          status: HTTP_STATUS.OK,
-          headers: { "Content-Type": A2A_CONTENT_TYPE },
-        });
-      }
-
-      const pushListMatch = url.pathname.match(/^\/tasks\/([^/:]+)\/pushNotificationConfigs$/);
-      if (pushListMatch) {
-        const taskId = decodeURIComponent(pushListMatch[1]);
-        if (request.method === "POST") {
-          const raw = await request.json();
-          const cfg = TaskPushNotificationConfig.fromJSON({ ...(raw ?? {}), taskId });
-          if (!cfg.id) {
-            cfg.id = crypto.randomUUID();
-          }
-          const created = await requestHandler.createTaskPushNotificationConfig(cfg, callContext);
-          return new Response(JSON.stringify(TaskPushNotificationConfig.toJSON(created)), {
-            status: HTTP_STATUS.OK,
-            headers: { "Content-Type": A2A_CONTENT_TYPE },
-          });
-        }
-        if (request.method === "GET") {
-          const list = await requestHandler.listTaskPushNotificationConfigs(
-            { taskId, pageSize: 0, pageToken: "", tenant: "" },
-            callContext
-          );
-          return new Response(
-            JSON.stringify(ListTaskPushNotificationConfigsResponse.toJSON(list)),
-            {
-              status: HTTP_STATUS.OK,
-              headers: { "Content-Type": A2A_CONTENT_TYPE },
-            }
-          );
-        }
-      }
-
-      const pushItemMatch = url.pathname.match(
-        /^\/tasks\/([^/:]+)\/pushNotificationConfigs\/([^/]+)$/
-      );
-      if (pushItemMatch) {
-        const taskId = decodeURIComponent(pushItemMatch[1]);
-        const configId = decodeURIComponent(pushItemMatch[2]);
-        if (request.method === "GET") {
-          const item = await requestHandler.getTaskPushNotificationConfig(
-            { taskId, id: configId, tenant: "" },
-            callContext
-          );
-          return new Response(JSON.stringify(TaskPushNotificationConfig.toJSON(item)), {
-            status: HTTP_STATUS.OK,
-            headers: { "Content-Type": A2A_CONTENT_TYPE },
-          });
-        }
-        if (request.method === "DELETE") {
-          await requestHandler.deleteTaskPushNotificationConfig(
-            { taskId, id: configId, tenant: "" },
-            callContext
-          );
-          return new Response(null, { status: HTTP_STATUS.NO_CONTENT });
-        }
       }
 
       if (request.method === "POST" && url.pathname === "/") {

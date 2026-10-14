@@ -48,7 +48,9 @@ func ServeExec(ctx context.Context, cfg Config, command, chunk string) error {
 
 	caps := &a2a.AgentCapabilities{Streaming: chunk != "", PushNotifications: true}
 	executor := newExecExecutor(command, chunk)
-	pushSender := push.NewHTTPPushSender(&push.HTTPSenderConfig{AllowPrivateNetworks: true})
+	pushSender := &loggingPushSender{
+		inner: push.NewHTTPPushSender(&push.HTTPSenderConfig{AllowPrivateNetworks: true}),
+	}
 	handler := a2asrv.NewHandler(
 		executor,
 		a2asrv.WithCapabilityChecks(caps),
@@ -60,6 +62,20 @@ func ServeExec(ctx context.Context, cfg Config, command, chunk string) error {
 	}
 
 	return serve(ctx, cfg, handler, card)
+}
+
+type loggingPushSender struct {
+	inner push.Sender
+}
+
+func (s *loggingPushSender) SendPush(ctx context.Context, config *a2a.PushConfig, event a2a.Event) error {
+	err := s.inner.SendPush(ctx, config, event)
+	if err == nil {
+		if su, ok := event.(*a2a.TaskStatusUpdateEvent); ok && su.Status.State == a2a.TaskStateCompleted {
+			fmt.Fprintf(os.Stderr, "\033[1;35m🔔 [A2A Push Notification] Sent TASK_STATE_COMPLETED webhook -> %s\033[0m\n", config.URL)
+		}
+	}
+	return err
 }
 
 type execExecutor struct {
