@@ -24,7 +24,7 @@ if [[ -n "$BOOKED" ]]; then
 fi
 
 cat << CAL
-=== My Calendar Availability This Week ===
+=== My Calendar Availability Next Week ===
 - Tuesday 10:00-10:30:   ❌ BUSY (Architecture Offsite)
 - Wednesday 14:00-14:30: ❌ BUSY (Customer Escalation Sync)
 - Thursday 11:00-11:30:  ❌ BUSY (Sprint Planning)

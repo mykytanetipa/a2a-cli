@@ -172,7 +172,7 @@ def gcal_request(method: str, path: str, body=None, query=None):
 
 def current_week_monday() -> datetime.date:
   today = datetime.date.today()
-  return today - datetime.timedelta(days=today.weekday())
+  return today - datetime.timedelta(days=today.weekday()) + datetime.timedelta(days=7)
 
 
 def local_tz_offset() -> str:
@@ -201,15 +201,16 @@ def create_event(cal_id: str, summary: str, day_offset: int, start_hm: str, end_
   return gcal_request("POST", f"/calendars/{urllib.parse.quote(cal_id, safe='')}/events", body=body)
 
 
-def list_week_events(cal_id: str) -> list[dict]:
-  monday = current_week_monday()
-  saturday = monday + datetime.timedelta(days=5)
+def list_week_events(cal_id: str, include_this_week: bool = False) -> list[dict]:
+  next_monday = current_week_monday()
+  start_day = next_monday - datetime.timedelta(days=7) if include_this_week else next_monday
+  saturday = next_monday + datetime.timedelta(days=5)
   tz = local_tz_offset()
   res = gcal_request(
       "GET",
       f"/calendars/{urllib.parse.quote(cal_id, safe='')}/events",
       query={
-          "timeMin": f"{monday.isoformat()}T00:00:00{tz}",
+          "timeMin": f"{start_day.isoformat()}T00:00:00{tz}",
           "timeMax": f"{saturday.isoformat()}T23:59:59{tz}",
           "singleEvents": "true",
           "orderBy": "startTime",
@@ -219,7 +220,7 @@ def list_week_events(cal_id: str) -> list[dict]:
 
 
 def clear_week_events(cal_id: str):
-  for ev in list_week_events(cal_id):
+  for ev in list_week_events(cal_id, include_this_week=True):
     ev_id = ev.get("id")
     if ev_id:
       try:
@@ -276,18 +277,18 @@ def reset_and_seed(quota_project: str = "", sa_email: str = "", user_email: str 
       pass
     cal_ids[key] = cal_id
 
-  print("🧹 Clearing existing current-week demo events...")
+  print("🧹 Clearing existing demo events (this week & next week)...")
   for key, cid in cal_ids.items():
     clear_week_events(cid)
 
-  print("🌱 Seeding 'Demo: My Calendar'...")
+  print("🌱 Seeding 'Demo: My Calendar' for next week...")
   create_event(cal_ids["my"], "Architecture Offsite", 1, "10:00", "10:30")
   create_event(cal_ids["my"], "Customer Escalation Sync", 2, "14:00", "14:30")
   create_event(cal_ids["my"], "Sprint Planning", 3, "11:00", "11:30")
   create_event(cal_ids["my"], "Dentist", 4, "09:30", "10:00")
   create_event(cal_ids["my"], "Release Readiness Review", 4, "11:00", "11:30")
 
-  print("🌱 Seeding 'Demo: VP Yaroslav'...")
+  print("🌱 Seeding 'Demo: VP Yaroslav' for next week...")
   create_event(cal_ids["vp"], "Staff Sync", 1, "09:00", "10:00")
   create_event(cal_ids["vp"], "Board Prep", 1, "10:30", "12:00")
   create_event(cal_ids["vp"], "Product Review", 2, "13:00", "14:00")
@@ -303,7 +304,7 @@ def reset_and_seed(quota_project: str = "", sa_email: str = "", user_email: str 
       description="[MOVABLE_INTERNAL_1ON1]",
   )
 
-  print("🌱 Seeding 'Demo: Director Alex'...")
+  print("🌱 Seeding 'Demo: Director Alex' for next week...")
   alex_sync = create_event(
       cal_ids["alex"],
       "Weekly Sync: Yaroslav (VP) & Alex (Director of Platform)",
@@ -313,6 +314,7 @@ def reset_and_seed(quota_project: str = "", sa_email: str = "", user_email: str 
       description="[MOVABLE_INTERNAL_1ON1]",
   )
 
+  next_mon = current_week_monday()
   state = {
       "quota_project": quota_project,
       "sa_email": sa_email,
@@ -320,13 +322,14 @@ def reset_and_seed(quota_project: str = "", sa_email: str = "", user_email: str 
       "calendars": cal_ids,
       "vp_sync_event_id": vp_sync["id"],
       "alex_sync_event_id": alex_sync["id"],
-      "week_monday": current_week_monday().isoformat(),
+      "week_monday": next_mon.isoformat(),
   }
   STATE_FILE.write_text(json.dumps(state, indent=2))
-  print("✅ All 3 Google Calendars seeded for this week!")
+  print(f"✅ All 3 Google Calendars seeded for NEXT WEEK (week of {next_mon.isoformat()})!")
   for key, meta in CALENDARS.items():
     cid = urllib.parse.quote(cal_ids[key])
     print(f"   🔗 Add '{meta['summary']}' to your Google Calendar UI: https://calendar.google.com/calendar/u/0/r?cid={cid}")
+  print(f"\n📅 View Next Week in Google Calendar: https://calendar.google.com/calendar/u/0/r/week/{next_mon.year}/{next_mon.month}/{next_mon.day}")
 
 
 def format_slot_label(ev: dict) -> tuple[str, str]:
@@ -360,7 +363,8 @@ def print_my_calendar():
       "Friday 09:30-10:00",
       "Friday 11:00-11:30",
   ]
-  print("=== My Calendar Availability This Week (Live Google Calendar) ===")
+  next_mon = current_week_monday()
+  print(f"=== My Calendar Availability Next Week (Week of {next_mon.isoformat()} — Live Google Calendar) ===")
   for s in target_slots:
     if s in by_slot:
       summary = by_slot[s]

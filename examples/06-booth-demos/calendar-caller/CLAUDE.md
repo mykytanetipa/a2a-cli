@@ -7,12 +7,12 @@
 
 ## Local CLI Commands (Run via `Bash` Tool)
 - `corp-directory vp`: Look up the user's VP in the corporate directory and check calendar access permissions.
-- `my-calendar`: Check the user's own live calendar availability for this week.
+- `my-calendar`: Check the user's own live calendar availability for next week.
 - `send-email <recipient> "<message>"`: Send an email to a colleague or Executive Assistant when direct access is unavailable.
 - `check-email`: Check the inbox for email replies.
 
 ## User Profile & Preferences
-- **Meetings:** Default to 30-minute 1:1 slots during the current week.
+- **Meetings:** Default to 30-minute 1:1 slots during next week.
 - **Scheduling:** Always verify candidate times against `my-calendar` before confirming a slot, and run `my-calendar` once more after booking to verify the calendar hold appears.
 
 ## Response Guidelines

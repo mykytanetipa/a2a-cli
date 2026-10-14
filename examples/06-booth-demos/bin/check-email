@@ -16,7 +16,7 @@ elif (( ROUND <= 1 )); then
   cat << 'EOF'
 📬 Inbox (1 new message from ea-sarah@0-a.org — received after 4h 20m delay):
    Subject: Re: 1:1 Meeting Request with VP
-   "Hi! Here are 3 times that work on the VP's calendar this week:
+   "Hi! Here are 3 times that work on the VP's calendar next week:
     - Tuesday 10:00–10:30
     - Wednesday 14:00–14:30
     - Thursday 11:00–11:30
