@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Authenticates with Google Calendar API (if needed), creates the 3 dedicated
+# Demo calendars ("Demo: My Calendar", "Demo: VP Yaroslav", "Demo: Director Alex"),
+# clears current-week demo events, and seeds this week's initial schedule.
+set -euo pipefail
+DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+rm -f /tmp/ea-email-round /tmp/ea-email-booked /tmp/vp-a2a-booked /tmp/a2a-gcal-token.json
+
+PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
+if [[ "$PROJECT_ID" == "(unset)" ]]; then
+  PROJECT_ID=""
+fi
+
+if ! python3 "$DEMO_DIR/bin/gcal_helper.py" reset "$PROJECT_ID" 2>/dev/null; then
+  echo "🔐 Logging in with Google Calendar scope via gcloud..."
+  gcloud auth application-default login \
+    --scopes="https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/cloud-platform"
+  if [[ -n "$PROJECT_ID" ]]; then
+    gcloud services enable calendar-json.googleapis.com --project="$PROJECT_ID" >/dev/null 2>&1 || true
+  fi
+  rm -f /tmp/a2a-gcal-token.json
+  python3 "$DEMO_DIR/bin/gcal_helper.py" reset "$PROJECT_ID"
+fi
+
+echo ""
+echo "🌐 Open https://calendar.google.com/calendar/u/0/r/week to watch all 3 calendars live!"

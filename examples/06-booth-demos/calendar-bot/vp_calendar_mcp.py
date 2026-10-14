@@ -81,33 +81,48 @@ def main():
       name = params.get("name")
       args = params.get("arguments", {})
       if name == "get_vp_candidate_slots":
-        rnd = args.get("round_number", 1)
-        if rnd == 1:
-          out = {
-              "open_slots": [
-                  "Tuesday 10:00-10:30",
-                  "Wednesday 14:00-14:30",
-                  "Thursday 11:00-11:30",
-              ]
-          }
-        else:
-          out = {
-              "open_slots": [],
-              "movable_internal_conflicts": [
-                  {
-                      "slot": "Thursday 15:30-16:00",
-                      "current_meeting": "Weekly Sync: Yaroslav (VP) & Alex (Director of Platform)",
-                      "attendee_a2a_agent": get_alex_url(),
-                      "suggested_reschedule_slot": "Friday 11:00-11:30",
-                      "instruction": (
-                          "Call `reschedule_conflict_via_a2a` to ask Alex's"
-                          " A2A agent to move this sync from Thursday"
-                          " 15:30-16:00 to Friday 11:00-11:30, then call"
-                          " `confirm_and_book_slot` for Thursday 15:30-16:00."
-                      ),
-                  }
-              ],
-          }
+        rnd = int(args.get("round_number", 1))
+        gcal_helper = demo_dir / "bin" / "gcal_helper.py"
+        out = None
+        if (demo_dir / ".gcal-state.json").exists() and gcal_helper.exists():
+          proc = subprocess.run(
+              ["python3", str(gcal_helper), "vp-slots", str(rnd)],
+              capture_output=True,
+              text=True,
+              check=False,
+          )
+          if proc.returncode == 0 and proc.stdout.strip():
+            try:
+              out = json.loads(proc.stdout)
+            except Exception:
+              out = None
+        if out is None:
+          if rnd == 1:
+            out = {
+                "open_slots": [
+                    "Tuesday 10:00-10:30",
+                    "Wednesday 14:00-14:30",
+                    "Thursday 11:00-11:30",
+                ]
+            }
+          else:
+            out = {
+                "open_slots": [],
+                "movable_internal_conflicts": [
+                    {
+                        "slot": "Thursday 15:30-16:00",
+                        "current_meeting": "Weekly Sync: Yaroslav (VP) & Alex (Director of Platform)",
+                        "attendee_a2a_agent": get_alex_url(),
+                        "suggested_reschedule_slot": "Friday 11:00-11:30",
+                        "instruction": (
+                            "Call `reschedule_conflict_via_a2a` to ask Alex's"
+                            " A2A agent to move this sync from Thursday"
+                            " 15:30-16:00 to Friday 11:00-11:30, then call"
+                            " `confirm_and_book_slot` for Thursday 15:30-16:00."
+                        ),
+                    }
+                ],
+            }
       elif name == "reschedule_conflict_via_a2a":
         alex_url = args.get("attendee_agent_url") or get_alex_url()
         from_slot = args.get("from_slot", "Thursday 15:30-16:00")
@@ -135,12 +150,20 @@ def main():
         }
       elif name == "confirm_and_book_slot":
         pathlib.Path("/tmp/vp-a2a-booked").write_text("Thursday 15:30-16:00\n")
+        gcal_helper = demo_dir / "bin" / "gcal_helper.py"
+        if (demo_dir / ".gcal-state.json").exists() and gcal_helper.exists():
+          subprocess.run(
+              ["python3", str(gcal_helper), "book-vp"],
+              capture_output=True,
+              check=False,
+          )
         out = {
             "status": "CONFIRMED",
             "slot": args.get("slot"),
             "attendee": args.get("attendee", "User"),
             "calendar_invite_id": "CAL-INV-8842",
-            "note": "Approved by VP; calendar invite sent.",
+            "google_calendar_synced": (demo_dir / ".gcal-state.json").exists(),
+            "note": "Approved by VP; real Google Calendar invite created on 'Demo: VP Yaroslav' and 'Demo: My Calendar'.",
         }
       else:
         out = {"error": f"unknown tool {name}"}

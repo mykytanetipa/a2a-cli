@@ -70,3 +70,5 @@ examples/06-booth-demos/bin/a2a
 node_modules/
 package-lock.json
 examples/06-booth-demos/.cf-subdomain
+examples/06-booth-demos/.gcal-state.json
+examples/06-booth-demos/calendar-worker/.deployed-urls.env

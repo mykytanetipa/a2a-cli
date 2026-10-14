@@ -1,28 +1,21 @@
 #!/usr/bin/env bash
+DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [[ -f "$DEMO_DIR/.gcal-state.json" ]]; then
+  if python3 "$DEMO_DIR/bin/gcal_helper.py" my-calendar 2>/dev/null; then
+    exit 0
+  fi
+fi
+
 BOOKED=""
 if [[ "${DEMO_NO_A2A:-0}" == "1" ]]; then
   if [[ -f /tmp/ea-email-booked ]]; then
-    BOOKED="📅 BOOKED: 1:1 with VP Sarah Chen (Confirmed via EA email)"
+    BOOKED="📅 BOOKED: 1:1 with VP Sarah Chen (Confirmed via EA email) [Invite: CAL-EA-104]"
   fi
 else
   if [[ -f /tmp/vp-a2a-booked ]]; then
     BOOKED="📅 BOOKED: 1:1 with Yaroslav, VP of Engineering [Invite: CAL-INV-8842]"
   fi
-fi
-
-# Optional Real Google Calendar sync if GCAL_ACCESS_TOKEN is exported
-if [[ -n "$BOOKED" && -n "${GCAL_ACCESS_TOKEN:-}" && ! -f /tmp/gcal-synced-8842 ]]; then
-  CAL_ID="${GCAL_CALENDAR_ID:-primary}"
-  curl -s -X POST "https://www.googleapis.com/calendar/v3/calendars/${CAL_ID}/events" \
-    -H "Authorization: Bearer ${GCAL_ACCESS_TOKEN}" \
-    -H "Content-Type: application/json" \
-    -d '{
-      "summary": "1:1 with VP (Booked via A2A)",
-      "description": "Multi-hop A2A scheduled meeting (Invite ID: CAL-INV-8842)",
-      "start": {"dateTime": "2026-10-15T15:30:00Z"},
-      "end":   {"dateTime": "2026-10-15T16:00:00Z"}
-    }' >/dev/null 2>&1 || true
-  touch /tmp/gcal-synced-8842
 fi
 
 THU_SLOT="✅ FREE (Only open 30-min slot this week)"

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Simulates sending an email to the VP's human Executive Assistant in the No-A2A flow
+DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ROUND=0
 if [[ -f /tmp/ea-email-round ]]; then
   ROUND="$(cat /tmp/ea-email-round)"
@@ -10,7 +11,12 @@ echo "$ROUND" > /tmp/ea-email-round
 MSG="$*"
 if echo "$MSG" | grep -qiE "confirm|15:30|3:30|book"; then
   if (( ROUND >= 2 )); then
-    touch /tmp/ea-email-booked
+    if [[ ! -f /tmp/ea-email-booked ]]; then
+      touch /tmp/ea-email-booked
+      if [[ -f "$DEMO_DIR/.gcal-state.json" ]]; then
+        python3 "$DEMO_DIR/bin/gcal_helper.py" book-ea >/dev/null 2>&1 || true
+      fi
+    fi
   fi
 fi
 
