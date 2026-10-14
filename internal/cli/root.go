@@ -153,7 +153,7 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 	pf.StringVar(&cfg.a2aVersion, "a2a-version", "", "Controls which a2a-protocol version client will advertise to the server.")
 	cfg.svcParams.Attach(pf)
 	pf.StringVar(&cfg.tenant, "tenant", "", "Tenant identifier")
-	pf.DurationVar(&cfg.timeout, "timeout", 30*time.Second, "Request timeout")
+	pf.DurationVar(&cfg.timeout, "timeout", 120*time.Second, "Request timeout")
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit .env file in place of the local .env")

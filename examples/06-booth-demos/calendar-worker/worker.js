@@ -134,10 +134,6 @@ export default {
       );
     }
 
-    if (url.pathname.endsWith("/.well-known/agent-card.json") && !ua.includes("Go-http-client")) {
-      return new Response("Not Found", { status: 404 });
-    }
-
     const activeAgent = role === "alex" ? alexAgent : vpAgent;
     const a2aResp = await activeAgent.handleFetch(request, env, ctx);
     if (a2aResp) {

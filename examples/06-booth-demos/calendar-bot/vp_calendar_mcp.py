@@ -137,7 +137,7 @@ def main():
               [a2a_bin, "send", "-a", alex_url, prompt],
               capture_output=True,
               text=True,
-              timeout=60,
+              timeout=120,
           )
           reply = proc.stdout.strip() or proc.stderr.strip()
         except Exception as e:

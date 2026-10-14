@@ -217,20 +217,20 @@ class FallbackAgentExecutor {
 /**
  * Builds an `@a2a-js/sdk/client` `Client` connected to the upstream local `a2a server` tunnel.
  */
-async function createUpstreamSdkClient(upstreamUrl) {
-  const baseResolver = new DefaultAgentCardResolver();
+async function createUpstreamSdkClient(upstreamUrl, cardTemplate) {
   const tunnelResolver = {
-    async resolve(baseUrl, path) {
-      const card = await baseResolver.resolve(baseUrl, path);
-      card.supportedInterfaces = [
-        {
-          url: upstreamUrl,
-          protocolBinding: "HTTP+JSON",
-          tenant: "",
-          protocolVersion: A2A_PROTOCOL_VERSION,
-        },
-      ];
-      return card;
+    async resolve() {
+      return {
+        ...cardTemplate,
+        supportedInterfaces: [
+          {
+            url: upstreamUrl,
+            protocolBinding: "HTTP+JSON",
+            tenant: "",
+            protocolVersion: A2A_PROTOCOL_VERSION,
+          },
+        ],
+      };
     },
   };
   const factory = new ClientFactory(
@@ -340,7 +340,7 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
         if (liveUpstream) {
           // Forward via `@a2a-js/sdk/client` to the upstream local `a2a server`
           // (supports both blocking and `returnImmediately: true` `--async` without hitting Cloudflare's 30s waitUntil cap!)
-          const client = await createUpstreamSdkClient(liveUpstream);
+          const client = await createUpstreamSdkClient(liveUpstream, cardTemplate);
           result = await client.sendMessage(params);
         } else {
           result = await requestHandler.sendMessage(params, callContext);
@@ -363,7 +363,7 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
           ? Number(url.searchParams.get("historyLength"))
           : undefined;
         const task = liveUpstream
-          ? await (await createUpstreamSdkClient(liveUpstream)).getTask({
+          ? await (await createUpstreamSdkClient(liveUpstream, cardTemplate)).getTask({
               id: taskId,
               historyLength,
               tenant: "",
@@ -386,7 +386,7 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
             cfg.id = crypto.randomUUID();
           }
           const created = liveUpstream
-            ? await (await createUpstreamSdkClient(liveUpstream)).createTaskPushNotificationConfig(
+            ? await (await createUpstreamSdkClient(liveUpstream, cardTemplate)).createTaskPushNotificationConfig(
                 cfg
               )
             : await requestHandler.createTaskPushNotificationConfig(cfg, callContext);
@@ -397,7 +397,7 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
         }
         if (request.method === "GET") {
           const list = liveUpstream
-            ? await (await createUpstreamSdkClient(liveUpstream)).listTaskPushNotificationConfigs({
+            ? await (await createUpstreamSdkClient(liveUpstream, cardTemplate)).listTaskPushNotificationConfigs({
                 taskId,
                 pageSize: 0,
                 pageToken: "",

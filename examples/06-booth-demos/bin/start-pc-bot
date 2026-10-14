@@ -27,7 +27,7 @@ trap cleanup EXIT INT TERM
 lsof -ti tcp:18081 | xargs kill -9 2>/dev/null || true
 python3 - << 'PYEOF' &
 import urllib.request
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 class Proxy(BaseHTTPRequestHandler):
     def _proxy(self):
@@ -42,7 +42,7 @@ class Proxy(BaseHTTPRequestHandler):
         headers = {k: v for k, v in self.headers.items() if k.lower() != "host"}
         req = urllib.request.Request(url, data=body, headers=headers, method=self.command)
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=180) as resp:
                 data = resp.read()
                 self.send_response(resp.status)
                 for k, v in resp.getheaders():
@@ -60,7 +60,7 @@ class Proxy(BaseHTTPRequestHandler):
     def do_DELETE(self): self._proxy()
     def log_message(self, *args): pass
 
-HTTPServer(("127.0.0.1", 18081), Proxy).serve_forever()
+ThreadingHTTPServer(("127.0.0.1", 18081), Proxy).serve_forever()
 PYEOF
 
 # 2. Start cloudflared quick-tunnel to 18081 and register with RigFoundry Cloudflare Worker
