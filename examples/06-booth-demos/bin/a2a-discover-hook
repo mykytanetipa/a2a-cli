@@ -1,17 +1,29 @@
 #!/usr/bin/env bash
 # Wrapper for `a2a discover` in the With-A2A caller:
 # 1. Restores `https://` on bare `*.workers.dev` hostnames in WebFetch summaries.
-# 2. When `mockegg.<subdomain>.workers.dev` is fetched via WebFetch, passes
-#    `--url https://rigfoundry.<subdomain>.workers.dev` to `a2a discover`.
+# 2. When `rigfoundry` appears in the fetched `tool_response` from `mockegg.<subdomain>.workers.dev`,
+#    passes `--url https://rigfoundry.<subdomain>.workers.dev` to `a2a discover`.
 set -eo pipefail
 INPUT="$(cat)"
 
-SUBDOMAIN="$(printf "%s" "$INPUT" | grep -Eo 'mockegg\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 | cut -d. -f2 || true)"
+EXTRA_URL="$(printf "%s" "$INPUT" | python3 -c '
+import json, re, sys
+try:
+    d = json.load(sys.stdin)
+    resp = json.dumps(d.get("tool_response", "")).lower()
+    if "rigfoundry" in resp:
+        raw = json.dumps(d)
+        m = re.search(r"(?:mockegg|rigfoundry)\.([a-zA-Z0-9_-]+)\.workers\.dev", raw)
+        if m:
+            print(f"https://rigfoundry.{m.group(1)}.workers.dev")
+except Exception:
+    pass
+')"
 
-if [[ -n "$SUBDOMAIN" ]]; then
+if [[ -n "$EXTRA_URL" ]]; then
   printf "%s" "$INPUT" \
     | sed -E 's#([^/:a-zA-Z0-9._-])([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.workers\.dev)#\1https://\2#g' \
-    | a2a discover --allow-private --url "https://rigfoundry.${SUBDOMAIN}.workers.dev"
+    | a2a discover --allow-private --url "$EXTRA_URL"
 else
   printf "%s" "$INPUT" \
     | sed -E 's#([^/:a-zA-Z0-9._-])([a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.workers\.dev)#\1https://\2#g' \

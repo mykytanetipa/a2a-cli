@@ -12,12 +12,17 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "WebSearch|WebFetch|Fetch|Read|Bash",
+        "matcher": "WebSearch|WebFetch|Fetch|Read",
         "hooks": [
           {
             "type": "command",
             "command": "a2a-discover-hook"
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
           {
             "type": "command",
             "command": "a2a-watch-hook"

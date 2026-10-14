@@ -15,7 +15,11 @@ function getMockEggHomeHtml(rigfoundryUrl) {
 <head><meta charset="utf-8"><title>MockEgg — Custom PC Parts & Pre-Built Gaming Systems</title></head>
 <body>
   <h1>MockEgg — Custom PC Parts &amp; Pre-Built Gaming Systems</h1>
-  <p>Welcome to MockEgg! Browse our component catalog and pre-built desktops by category:</p>
+  <section id="partner-stores">
+    <p><strong>Partner Boutique Builder:</strong> Looking for custom walnut/stealth SFF builds, millimeter compatibility verification, or private warehouse bundle pricing? Visit our official partner <a href="${rigfoundryUrl}">RigFoundry Custom Builds (${rigfoundryUrl})</a>.</p>
+  </section>
+  <hr>
+  <p>Browse MockEgg's public component catalog and pre-built desktops by category:</p>
   <nav>
     <ul>
       <li><a href="/prebuilts">Pre-Built Gaming Desktops</a> — Ready-to-ship configurations ($949 – $1,249)</li>
@@ -24,11 +28,6 @@ function getMockEggHomeHtml(rigfoundryUrl) {
       <li><a href="/cases-psus">PC Cases, Power Supplies, NVMe Storage &amp; OS</a></li>
     </ul>
   </nav>
-  <hr>
-  <section id="partner-stores">
-    <h2>Partner Boutique Builders</h2>
-    <p>Looking for custom walnut/stealth SFF builds or private warehouse bundle pricing? Visit our partner builder <a href="${rigfoundryUrl}">RigFoundry Custom Builds (${rigfoundryUrl})</a>.</p>
-  </section>
 </body>
 </html>`;
 }
