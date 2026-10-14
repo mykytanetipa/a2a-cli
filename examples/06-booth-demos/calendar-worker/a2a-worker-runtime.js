@@ -35,26 +35,100 @@ import {
 } from "@a2a-js/sdk/client";
 import {
   HTTP_STATUS,
-  PushNotificationNotSupportedError,
-  RequestMalformedError,
   restStatusFor,
   toRestErrorBody,
 } from "@a2a-js/sdk/errors";
 
+function getEdgeCache() {
+  return typeof caches !== "undefined" && caches.default ? caches.default : null;
+}
+
+async function cachePutJson(keyUrl, data) {
+  const cache = getEdgeCache();
+  if (!cache) return;
+  await cache.put(
+    new Request(keyUrl),
+    new Response(JSON.stringify(data), {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=3600",
+      },
+    })
+  );
+}
+
+async function cacheGetJson(keyUrl) {
+  const cache = getEdgeCache();
+  if (!cache) return null;
+  const res = await cache.match(new Request(keyUrl));
+  if (!res) return null;
+  return await res.json();
+}
+
 /**
- * Wraps `@a2a-js/sdk/server`'s `InMemoryPushNotificationStore` so that if a caller
- * registers `http://127.0.0.1:19081/webhook` (or `localhost:19081`), `@a2a-js/sdk`'s
- * `DefaultPushNotificationSender` delivers the webhook over the registered upstream tunnel.
+ * Extends `@a2a-js/sdk/server`'s `InMemoryTaskStore` with Cloudflare's shared
+ * `caches.default` so tasks created via `a2a send --async` in Isolate A are
+ * immediately visible to `a2a task push-config create` and `a2a task get` in Isolate B.
  */
-class TunnelAwarePushNotificationStore extends InMemoryPushNotificationStore {
-  constructor(getUpstreamUrl) {
+class EdgeSharedTaskStore extends InMemoryTaskStore {
+  constructor(namespace) {
     super();
-    this.getUpstreamUrl = getUpstreamUrl;
+    this.namespace = namespace;
+  }
+
+  _key(taskId) {
+    return `https://a2a-state.internal/${this.namespace}/tasks/${encodeURIComponent(taskId)}`;
+  }
+
+  async save(task, context) {
+    await super.save(task, context);
+    await cachePutJson(this._key(task.id), Task.toJSON(task));
   }
 
   async load(taskId, context) {
-    const configs = await super.load(taskId, context);
-    const upstream = this.getUpstreamUrl();
+    const cached = await cacheGetJson(this._key(taskId));
+    if (cached) {
+      const hydrated = Task.fromJSON(cached);
+      await super.save(hydrated, context);
+      return hydrated;
+    }
+    return await super.load(taskId, context);
+  }
+}
+
+/**
+ * Extends `@a2a-js/sdk/server`'s `InMemoryPushNotificationStore` with Cloudflare's
+ * shared `caches.default` AND rewrites `127.0.0.1:19081/webhook` to the active
+ * tunnel's `/webhook` route so `@a2a-js/sdk`'s `DefaultPushNotificationSender`
+ * delivers webhooks across isolates to the user's local machine.
+ */
+class EdgeSharedPushNotificationStore extends InMemoryPushNotificationStore {
+  constructor(namespace, getUpstreamUrl) {
+    super();
+    this.namespace = namespace;
+    this.getUpstreamUrl = getUpstreamUrl;
+  }
+
+  _key(taskId) {
+    return `https://a2a-state.internal/${this.namespace}/push/${encodeURIComponent(taskId)}`;
+  }
+
+  async save(taskId, context, config) {
+    await super.save(taskId, context, config);
+    const existing = await super.load(taskId, context);
+    await cachePutJson(
+      this._key(taskId),
+      existing.map((c) => TaskPushNotificationConfig.toJSON(c))
+    );
+  }
+
+  async load(taskId, context) {
+    let configs = await super.load(taskId, context);
+    const cached = await cacheGetJson(this._key(taskId));
+    if (Array.isArray(cached) && cached.length > 0) {
+      configs = cached.map((c) => TaskPushNotificationConfig.fromJSON(c));
+    }
+    const upstream = await this.getUpstreamUrl();
     if (!upstream) return configs;
     return configs.map((c) => {
       if (
@@ -71,9 +145,7 @@ class TunnelAwarePushNotificationStore extends InMemoryPushNotificationStore {
 
 /**
  * `AgentExecutor` implementation powered by `@a2a-js/sdk/client` (`ClientFactory` +
- * `RestTransportFactory`). Emits `TASK_STATE_SUBMITTED` immediately (so `a2a send --async`
- * returns right away), then forwards the A2A `sendMessage` request via `@a2a-js/sdk/client`
- * to the local `a2a server` (`claude -p`) and publishes the resulting artifact & `TASK_STATE_COMPLETED`.
+ * `RestTransportFactory`).
  */
 class TunnelBridgeAgentExecutor {
   constructor(getUpstreamUrl, registerBackgroundPromise, fallbackFn) {
@@ -90,7 +162,6 @@ class TunnelBridgeAgentExecutor {
   async execute(requestContext, eventBus) {
     const { taskId, contextId, userMessage, task: existingTask } = requestContext;
 
-    // 1. Emit initial SUBMITTED task snapshot so `--async` (`returnImmediately: true`) returns immediately.
     const initialTask = existingTask ?? {
       id: taskId,
       contextId,
@@ -105,9 +176,7 @@ class TunnelBridgeAgentExecutor {
     eventBus.publish(AgentEvent.task(initialTask));
 
     const runPromise = (async () => {
-      // Yield one macrotask so `DefaultRequestHandler.sendMessage` with `returnImmediately: true`
-      // resolves `TASK_STATE_SUBMITTED` before we transition to `TASK_STATE_WORKING`.
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise((r) => setTimeout(r, 50));
 
       eventBus.publish(
         AgentEvent.statusUpdate({
@@ -122,7 +191,7 @@ class TunnelBridgeAgentExecutor {
       );
 
       let replyText = "";
-      const upstreamUrl = this.getUpstreamUrl();
+      const upstreamUrl = await this.getUpstreamUrl();
 
       if (upstreamUrl) {
         const baseResolver = new DefaultAgentCardResolver();
@@ -205,12 +274,10 @@ class TunnelBridgeAgentExecutor {
       );
     })();
 
-    // Keep the Cloudflare Worker isolate alive until both `runPromise` AND
-    // `DefaultPushNotificationSender`'s async webhook POST settle.
     this.registerBackgroundPromise(
       runPromise.then(
-        () => new Promise((r) => setTimeout(r, 1500)),
-        () => new Promise((r) => setTimeout(r, 1500))
+        () => new Promise((r) => setTimeout(r, 2000)),
+        () => new Promise((r) => setTimeout(r, 2000))
       )
     );
 
@@ -241,18 +308,22 @@ function extractTextFromSendMessageResult(res) {
   return "";
 }
 
-/**
- * Creates a full `@a2a-js/sdk` server instance (`DefaultRequestHandler`, `InMemoryTaskStore`,
- * `TunnelAwarePushNotificationStore`, `DefaultPushNotificationSender`, `JsonRpcTransportHandler`,
- * and Web-Standard `fetch(Request)` adapter for `HTTP+JSON` REST & `JSONRPC`).
- */
 export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbackFn }) {
+  const namespace = (cardTemplate.name || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
+  const upstreamKey = `https://a2a-state.internal/${namespace}/config/upstream`;
   let upstreamUrl = defaultUpstreamUrl || "";
   let activeCtx = null;
 
-  const getUpstreamUrl = () => upstreamUrl;
-  const setUpstreamUrl = (u) => {
+  const getUpstreamUrl = async () => {
+    const cached = await cacheGetJson(upstreamKey);
+    if (cached?.upstreamUrl) {
+      upstreamUrl = cached.upstreamUrl;
+    }
+    return upstreamUrl;
+  };
+  const setUpstreamUrl = async (u) => {
     upstreamUrl = u;
+    await cachePutJson(upstreamKey, { upstreamUrl: u });
   };
   const registerBackgroundPromise = (p) => {
     if (activeCtx && typeof activeCtx.waitUntil === "function") {
@@ -277,8 +348,8 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
     },
   });
 
-  const taskStore = new InMemoryTaskStore();
-  const pushStore = new TunnelAwarePushNotificationStore(getUpstreamUrl);
+  const taskStore = new EdgeSharedTaskStore(namespace);
+  const pushStore = new EdgeSharedPushNotificationStore(namespace, getUpstreamUrl);
   const pushSender = new DefaultPushNotificationSender(pushStore, { timeout: 10000 });
   const executor = new TunnelBridgeAgentExecutor(
     getUpstreamUrl,
@@ -301,16 +372,14 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
     const url = new URL(request.url);
     currentOrigin = url.origin;
 
-    // Admin endpoint for `start-pc-bot` / `start-calendar-bot` to register the live cloudflared tunnel URL
     if (request.method === "POST" && url.pathname === "/_admin/register-upstream") {
       const body = await request.json();
       if (body?.upstreamUrl) {
-        setUpstreamUrl(body.upstreamUrl);
+        await setUpstreamUrl(body.upstreamUrl);
       }
       return Response.json({ ok: true, upstreamUrl });
     }
 
-    // 1. Agent Card endpoint (`/.well-known/agent-card.json`)
     if (request.method === "GET" && url.pathname.endsWith("/.well-known/agent-card.json")) {
       const card = await requestHandler.getAgentCard();
       return Response.json(AgentCard.toJSON(card));
@@ -331,11 +400,13 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
       const card = await requestHandler.getAgentCard();
       validateVersion(callContext.requestedVersion, card, "HTTP+JSON");
 
-      // 2. HTTP+JSON REST: POST /message:send
       if (request.method === "POST" && url.pathname === "/message:send") {
         const raw = await request.json();
         const params = SendMessageRequest.fromJSON(raw ?? {});
         const result = await requestHandler.sendMessage(params, callContext);
+        if ("id" in result && result.id) {
+          await taskStore.save(result, callContext);
+        }
         const protoPayload =
           "messageId" in result
             ? { payload: { $case: "message", value: result } }
@@ -346,7 +417,6 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
         });
       }
 
-      // 3. HTTP+JSON REST: POST /message:stream
       if (request.method === "POST" && url.pathname === "/message:stream") {
         const raw = await request.json();
         const params = SendMessageRequest.fromJSON(raw ?? {});
@@ -371,7 +441,6 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
         return new Response(readable, { status: HTTP_STATUS.OK, headers: SSE_HEADERS });
       }
 
-      // 4. HTTP+JSON REST: GET /tasks/:taskId
       const taskMatch = url.pathname.match(/^\/tasks\/([^/:]+)$/);
       if (request.method === "GET" && taskMatch) {
         const taskId = decodeURIComponent(taskMatch[1]);
@@ -388,7 +457,6 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
         });
       }
 
-      // 5. HTTP+JSON REST: GET /tasks
       if (request.method === "GET" && url.pathname === "/tasks") {
         const listRes = await requestHandler.listTasks(
           {
@@ -406,7 +474,6 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
         });
       }
 
-      // 6. HTTP+JSON REST: POST /tasks/:taskId:cancel
       const cancelMatch = url.pathname.match(/^\/tasks\/([^/:]+):cancel$/);
       if (request.method === "POST" && cancelMatch) {
         const taskId = decodeURIComponent(cancelMatch[1]);
@@ -420,7 +487,6 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
         });
       }
 
-      // 7. HTTP+JSON REST: POST & GET /tasks/:taskId/pushNotificationConfigs
       const pushListMatch = url.pathname.match(/^\/tasks\/([^/:]+)\/pushNotificationConfigs$/);
       if (pushListMatch) {
         const taskId = decodeURIComponent(pushListMatch[1]);
@@ -451,7 +517,6 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
         }
       }
 
-      // 8. HTTP+JSON REST: GET & DELETE /tasks/:taskId/pushNotificationConfigs/:configId
       const pushItemMatch = url.pathname.match(
         /^\/tasks\/([^/:]+)\/pushNotificationConfigs\/([^/]+)$/
       );
@@ -477,7 +542,6 @@ export function createA2AWorkerAgent({ cardTemplate, defaultUpstreamUrl, fallbac
         }
       }
 
-      // 9. JSON-RPC fallback on POST /
       if (request.method === "POST" && url.pathname === "/") {
         const raw = await request.json();
         const rpcResult = await jsonRpcTransport.handle(raw, callContext);
