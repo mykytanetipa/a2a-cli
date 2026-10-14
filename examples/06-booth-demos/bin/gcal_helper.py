@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Real Google Calendar API v3 integration for Demo 2 (using Service Account key or impersonation)."""
+"""Real Google Calendar API v3 integration with dynamic 09:00-17:00 interval scanning."""
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import datetime
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -23,6 +25,8 @@ CALENDARS = {
     "vp": {"summary": "Demo: VP Yaroslav", "colorId": "3"},
     "alex": {"summary": "Demo: Director Alex", "colorId": "6"},
 }
+
+DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
 
 def load_state() -> dict:
@@ -92,7 +96,6 @@ def get_access_token_and_project():
   sa_email = state.get("sa_email", "")
   quota_project = state.get("quota_project", "")
 
-  # 1. Fastest & zero IAM propagation delay: sign JWT with ~/.config/a2a-cal-sa.json
   if SA_KEY_FILE.exists():
     try:
       token = _token_from_sa_key(SA_KEY_FILE)
@@ -107,7 +110,6 @@ def get_access_token_and_project():
     except Exception as e:
       sys.stderr.write(f"[warn] SA key token exchange failed: {e}\n")
 
-  # 2. Fallback: gcloud service account impersonation
   if sa_email:
     proc = subprocess.run(
         [
@@ -131,7 +133,6 @@ def get_access_token_and_project():
           })
       )
       return token, quota_project
-    sys.stderr.write(f"[warn] gcloud impersonation stderr: {proc.stderr}\n")
 
   raise RuntimeError(
       "Could not obtain Google Calendar token. Check gcloud login/project and re-run reset-calendars."
@@ -170,9 +171,13 @@ def gcal_request(method: str, path: str, body=None, query=None):
     raise RuntimeError(f"Google Calendar API {method} {path} failed ({e.code}): {err_body}") from e
 
 
-def current_week_monday() -> datetime.date:
+def next_week_monday() -> datetime.date:
   today = datetime.date.today()
   return today - datetime.timedelta(days=today.weekday()) + datetime.timedelta(days=7)
+
+
+def local_tz() -> datetime.tzinfo:
+  return datetime.datetime.now().astimezone().tzinfo
 
 
 def local_tz_offset() -> str:
@@ -185,7 +190,7 @@ def local_tz_offset() -> str:
 
 
 def slot_iso(day_offset: int, hh_mm: str) -> str:
-  monday = current_week_monday()
+  monday = next_week_monday()
   target_date = monday + datetime.timedelta(days=day_offset)
   tz = local_tz_offset()
   return f"{target_date.isoformat()}T{hh_mm}:00{tz}"
@@ -202,9 +207,9 @@ def create_event(cal_id: str, summary: str, day_offset: int, start_hm: str, end_
 
 
 def list_week_events(cal_id: str, include_this_week: bool = False) -> list[dict]:
-  next_monday = current_week_monday()
-  start_day = next_monday - datetime.timedelta(days=7) if include_this_week else next_monday
-  saturday = next_monday + datetime.timedelta(days=5)
+  monday = next_week_monday()
+  start_day = monday - datetime.timedelta(days=7) if include_this_week else monday
+  saturday = monday + datetime.timedelta(days=5)
   tz = local_tz_offset()
   res = gcal_request(
       "GET",
@@ -220,7 +225,8 @@ def list_week_events(cal_id: str, include_this_week: bool = False) -> list[dict]
 
 
 def clear_week_events(cal_id: str):
-  for ev in list_week_events(cal_id, include_this_week=True):
+  events = list_week_events(cal_id, include_this_week=True)
+  def _del(ev):
     ev_id = ev.get("id")
     if ev_id:
       try:
@@ -230,6 +236,19 @@ def clear_week_events(cal_id: str):
         )
       except Exception:
         pass
+  with ThreadPoolExecutor(max_workers=8) as pool:
+    list(pool.map(_del, events))
+
+
+def get_alex_agent_url() -> str:
+  if os.environ.get("ALEX_AGENT_URL"):
+    return os.environ["ALEX_AGENT_URL"]
+  env_file = DEMO_DIR / "calendar-worker" / ".deployed-urls.env"
+  if env_file.exists():
+    for line in env_file.read_text().splitlines():
+      if line.startswith("ALEX_AGENT_URL="):
+        return line.split("=", 1)[1].strip().strip('"')
+  return "https://alex-schedule-bot.booth-demos.workers.dev"
 
 
 def reset_and_seed(quota_project: str = "", sa_email: str = "", user_email: str = ""):
@@ -281,47 +300,88 @@ def reset_and_seed(quota_project: str = "", sa_email: str = "", user_email: str 
   for key, cid in cal_ids.items():
     clear_week_events(cid)
 
-  print("🌱 Seeding 'Demo: My Calendar' for next week...")
-  create_event(cal_ids["my"], "Architecture Offsite", 1, "10:00", "10:30")
-  create_event(cal_ids["my"], "Customer Escalation Sync", 2, "14:00", "14:30")
-  create_event(cal_ids["my"], "Sprint Planning", 3, "11:00", "11:30")
-  create_event(cal_ids["my"], "Dentist", 4, "09:30", "10:00")
-  create_event(cal_ids["my"], "Release Readiness Review", 4, "11:00", "11:30")
+  alex_url = get_alex_agent_url()
+  movable_desc = f"movable: true\nattendee_agent: {alex_url}"
 
-  print("🌱 Seeding 'Demo: VP Yaroslav' for next week...")
-  create_event(cal_ids["vp"], "Staff Sync", 1, "09:00", "10:00")
-  create_event(cal_ids["vp"], "Board Prep", 1, "10:30", "12:00")
-  create_event(cal_ids["vp"], "Product Review", 2, "13:00", "14:00")
-  create_event(cal_ids["vp"], "Exec Review", 2, "14:30", "16:00")
-  create_event(cal_ids["vp"], "QBR Review", 3, "09:30", "11:00")
-  create_event(cal_ids["vp"], "Leadership Lunch", 3, "11:30", "12:30")
-  vp_sync = create_event(
-      cal_ids["vp"],
-      "Weekly Sync: Yaroslav (VP) & Alex (Director of Platform)",
-      3,
-      "15:30",
-      "16:00",
-      description="[MOVABLE_INTERNAL_1ON1]",
-  )
+  # Full realistic Monday-Friday 09:00-17:00 schedules across all 3 calendars
+  my_specs = [
+      # Monday: open 16:00-16:30
+      (cal_ids["my"], "Sprint Planning & Backlog Grooming", 0, "09:00", "12:00", ""),
+      (cal_ids["my"], "Team Lunch", 0, "12:00", "13:00", ""),
+      (cal_ids["my"], "Distributed Systems Design Review", 0, "13:00", "16:00", ""),
+      (cal_ids["my"], "PR & Code Review Triage", 0, "16:30", "17:00", ""),
+      # Tuesday: fully booked 09:00-17:00
+      (cal_ids["my"], "Architecture Offsite", 1, "09:00", "12:30", ""),
+      (cal_ids["my"], "Lunch & Learn", 1, "12:30", "13:30", ""),
+      (cal_ids["my"], "Production Incident Game Day", 1, "13:30", "17:00", ""),
+      # Wednesday: open 10:30-11:00
+      (cal_ids["my"], "Platform Guild Sync", 2, "09:00", "10:30", ""),
+      (cal_ids["my"], "Security & Threat Modeling Review", 2, "11:00", "13:00", ""),
+      (cal_ids["my"], "Customer Escalation Working Session", 2, "13:00", "17:00", ""),
+      # Thursday: open 15:30-16:00
+      (cal_ids["my"], "Quarterly Roadmap Planning", 3, "09:00", "12:30", ""),
+      (cal_ids["my"], "Team Lunch", 3, "12:30", "13:30", ""),
+      (cal_ids["my"], "Latency & Load Benchmarking", 3, "13:30", "15:30", ""),
+      (cal_ids["my"], "Mentorship & Peer 1:1s", 3, "16:00", "17:00", ""),
+      # Friday: fully booked 09:00-17:00
+      (cal_ids["my"], "Dentist Appointment", 4, "09:00", "10:30", ""),
+      (cal_ids["my"], "Release Readiness Review", 4, "10:30", "13:00", ""),
+      (cal_ids["my"], "Engineering All-Hands & Demo Day", 4, "13:00", "17:00", ""),
+  ]
 
-  print("🌱 Seeding 'Demo: Director Alex' for next week...")
-  alex_sync = create_event(
-      cal_ids["alex"],
-      "Weekly Sync: Yaroslav (VP) & Alex (Director of Platform)",
-      3,
-      "15:30",
-      "16:00",
-      description="[MOVABLE_INTERNAL_1ON1]",
-  )
+  vp_specs = [
+      # Monday: fully booked 09:00-17:00
+      (cal_ids["vp"], "Executive Staff Sync", 0, "09:00", "12:30", ""),
+      (cal_ids["vp"], "Executive Working Lunch", 0, "12:30", "13:30", ""),
+      (cal_ids["vp"], "Board Deck Prep with External Advisors", 0, "13:30", "17:00", ""),
+      # Tuesday: open 10:00-10:30
+      (cal_ids["vp"], "VP & Directors Weekly Sync", 1, "09:00", "10:00", ""),
+      (cal_ids["vp"], "Cloud FinOps & Budget Review", 1, "10:30", "12:30", ""),
+      (cal_ids["vp"], "Leadership Lunch", 1, "12:30", "13:30", ""),
+      (cal_ids["vp"], "Keynote Rehearsal & Partner Call", 1, "13:30", "17:00", ""),
+      # Wednesday: open 14:00-14:30
+      (cal_ids["vp"], "Enterprise Customer Executive Briefing", 2, "09:00", "12:30", ""),
+      (cal_ids["vp"], "Principal Hiring Debrief & Lunch", 2, "12:30", "14:00", ""),
+      (cal_ids["vp"], "Product & GTM Strategy Review", 2, "14:30", "17:00", ""),
+      # Thursday: open 11:00-11:30; movable internal 1:1 at 15:30-16:00
+      (cal_ids["vp"], "Quarterly Business Review (QBR)", 3, "09:00", "11:00", ""),
+      (cal_ids["vp"], "Executive Offsite & Lunch", 3, "11:30", "15:30", ""),
+      (cal_ids["vp"], "Weekly Sync: Yaroslav (VP) & Alex (Director of Platform)", 3, "15:30", "16:00", movable_desc),
+      (cal_ids["vp"], "Investor Relations Call", 3, "16:00", "17:00", ""),
+      # Friday: open 11:00-11:30
+      (cal_ids["vp"], "FY Headcount & Org Planning", 4, "09:00", "11:00", ""),
+      (cal_ids["vp"], "Engineering All-Hands & Town Hall", 4, "11:30", "17:00", ""),
+  ]
 
-  next_mon = current_week_monday()
+  alex_specs = [
+      # Monday: fully booked 09:00-17:00
+      (cal_ids["alex"], "Platform Roadmap & OKR Review", 0, "09:00", "12:30", ""),
+      (cal_ids["alex"], "Core Infrastructure Architecture Sync", 0, "12:30", "17:00", ""),
+      # Tuesday: open 15:00-15:30
+      (cal_ids["alex"], "SRE & Reliability Engineering Summit", 1, "09:00", "15:00", ""),
+      (cal_ids["alex"], "Cloud Vendor Contract Negotiation", 1, "15:30", "17:00", ""),
+      # Wednesday: fully booked 09:00-17:00
+      (cal_ids["alex"], "Data Center Capacity & GPU Cluster Planning", 2, "09:00", "17:00", ""),
+      # Thursday: movable internal 1:1 at 15:30-16:00
+      (cal_ids["alex"], "Quarterly Business Review & Staff Hiring Panel", 3, "09:00", "15:30", ""),
+      (cal_ids["alex"], "Weekly Sync: Yaroslav (VP) & Alex (Director of Platform)", 3, "15:30", "16:00", movable_desc),
+      (cal_ids["alex"], "Platform Postmortem Review", 3, "16:00", "17:00", ""),
+      # Friday: open 11:00-11:30
+      (cal_ids["alex"], "Core Infra Escalation Triage", 4, "09:00", "11:00", ""),
+      (cal_ids["alex"], "Engineering All-Hands & Skip-Level 1:1s", 4, "11:30", "17:00", ""),
+  ]
+
+  print("🌱 Seeding full 09:00–17:00 Mon–Fri schedules on all 3 Google Calendars...")
+  all_specs = my_specs + vp_specs + alex_specs
+  with ThreadPoolExecutor(max_workers=8) as pool:
+    list(pool.map(lambda s: create_event(*s), all_specs))
+
+  next_mon = next_week_monday()
   state = {
       "quota_project": quota_project,
       "sa_email": sa_email,
       "user_email": user_email,
       "calendars": cal_ids,
-      "vp_sync_event_id": vp_sync["id"],
-      "alex_sync_event_id": alex_sync["id"],
       "week_monday": next_mon.isoformat(),
   }
   STATE_FILE.write_text(json.dumps(state, indent=2))
@@ -332,16 +392,66 @@ def reset_and_seed(quota_project: str = "", sa_email: str = "", user_email: str 
   print(f"\n📅 View Next Week in Google Calendar: https://calendar.google.com/calendar/u/0/r/week/{next_mon.year}/{next_mon.month}/{next_mon.day}")
 
 
-def format_slot_label(ev: dict) -> tuple[str, str]:
-  start_raw = ev.get("start", {}).get("dateTime", "")
-  end_raw = ev.get("end", {}).get("dateTime", "")
-  if not start_raw or not end_raw:
-    return ("Unknown", ev.get("summary", "Busy"))
-  dt_start = datetime.datetime.fromisoformat(start_raw).astimezone()
-  dt_end = datetime.datetime.fromisoformat(end_raw).astimezone()
-  day_name = dt_start.strftime("%A")
-  slot_str = f"{day_name} {dt_start.strftime('%H:%M')}-{dt_end.strftime('%H:%M')}"
-  return slot_str, ev.get("summary", "Busy")
+def analyze_calendar_week(cal_id: str) -> dict:
+  """Dynamically scans all real events on `cal_id` for next week (Mon-Fri 09:00-17:00)
+  and computes open 30-min slots, busy events, and movable internal meetings."""
+  monday = next_week_monday()
+  tz = local_tz()
+  events = list_week_events(cal_id)
+
+  parsed_events = []
+  for ev in events:
+    s_raw = ev.get("start", {}).get("dateTime", "")
+    e_raw = ev.get("end", {}).get("dateTime", "")
+    if not s_raw or not e_raw:
+      continue
+    dt_s = datetime.datetime.fromisoformat(s_raw).astimezone(tz)
+    dt_e = datetime.datetime.fromisoformat(e_raw).astimezone(tz)
+    desc = ev.get("description", "") or ""
+    parsed_events.append({
+        "id": ev.get("id", ""),
+        "summary": ev.get("summary", "Busy"),
+        "description": desc,
+        "start": dt_s,
+        "end": dt_e,
+        "day_name": dt_s.strftime("%A"),
+        "slot": f"{dt_s.strftime('%A')} {dt_s.strftime('%H:%M')}-{dt_e.strftime('%H:%M')}",
+    })
+
+  open_slots = []
+  for day_idx in range(5):
+    day_date = monday + datetime.timedelta(days=day_idx)
+    day_name = DAY_NAMES[day_idx]
+    for hour in range(9, 17):
+      for minute in (0, 30):
+        slot_s = datetime.datetime(
+            day_date.year, day_date.month, day_date.day, hour, minute, tzinfo=tz
+        )
+        slot_e = slot_s + datetime.timedelta(minutes=30)
+        overlaps = any(ev["start"] < slot_e and ev["end"] > slot_s for ev in parsed_events)
+        if not overlaps:
+          open_slots.append(
+              f"{day_name} {slot_s.strftime('%H:%M')}-{slot_e.strftime('%H:%M')}"
+          )
+
+  movable = []
+  for ev in parsed_events:
+    if "movable: true" in ev["description"].lower():
+      m_agent = re.search(r"attendee_agent:\s*(\S+)", ev["description"])
+      agent_url = m_agent.group(1) if m_agent else get_alex_agent_url()
+      movable.append({
+          "slot": ev["slot"],
+          "google_calendar_event_id": ev["id"],
+          "meeting_title": ev["summary"],
+          "attendee_a2a_agent": agent_url,
+      })
+
+  return {
+      "week_of": monday.isoformat(),
+      "open_30m_slots": open_slots,
+      "movable_internal_meetings": movable,
+      "events": parsed_events,
+  }
 
 
 def print_my_calendar():
@@ -349,53 +459,21 @@ def print_my_calendar():
   cal_id = state.get("calendars", {}).get("my")
   if not cal_id:
     raise RuntimeError("Google Calendars not initialized. Run reset-calendars.")
-  events = list_week_events(cal_id)
-  by_slot = {}
-  for ev in events:
-    slot_str, summary = format_slot_label(ev)
-    by_slot[slot_str] = summary
+  analysis = analyze_calendar_week(cal_id)
+  print(
+      f"=== My Calendar Next Week (Week of {analysis['week_monday'] if 'week_monday' in analysis else analysis['week_of']} — Live Google Calendar 09:00–17:00) ==="
+  )
+  print("\nOpen 30-Minute Slots (09:00–17:00 Mon–Fri):")
+  if analysis["open_30m_slots"]:
+    for s in analysis["open_30m_slots"]:
+      print(f"  ✅ FREE: {s}")
+  else:
+    print("  (No open 30-min slots)")
 
-  target_slots = [
-      "Tuesday 10:00-10:30",
-      "Wednesday 14:00-14:30",
-      "Thursday 11:00-11:30",
-      "Thursday 15:30-16:00",
-      "Friday 09:30-10:00",
-      "Friday 11:00-11:30",
-  ]
-  next_mon = current_week_monday()
-  print(f"=== My Calendar Availability Next Week (Week of {next_mon.isoformat()} — Live Google Calendar) ===")
-  for s in target_slots:
-    if s in by_slot:
-      summary = by_slot[s]
-      if "1:1 with" in summary or "CONFIRMED" in summary or "CAL-INV" in summary or "CAL-EA" in summary:
-        print(f"- {s}:  📅 BOOKED: {summary}")
-      else:
-        print(f"- {s}:  ❌ BUSY ({summary})")
-    else:
-      print(f"- {s}:  ✅ FREE (Only open 30-min slot on Google Calendar)")
-
-
-def move_alex_and_vp_sync(to_day_offset: int = 4, to_start: str = "11:00", to_end: str = "11:30"):
-  state = load_state()
-  cals = state.get("calendars", {})
-  body = {
-      "start": {"dateTime": slot_iso(to_day_offset, to_start)},
-      "end": {"dateTime": slot_iso(to_day_offset, to_end)},
-      "summary": "Weekly Sync: Yaroslav (VP) & Alex [Rescheduled: CAL-RESCHED-409]",
-  }
-  if cals.get("alex") and state.get("alex_sync_event_id"):
-    gcal_request(
-        "PATCH",
-        f"/calendars/{urllib.parse.quote(cals['alex'], safe='')}/events/{urllib.parse.quote(state['alex_sync_event_id'], safe='')}",
-        body=body,
-    )
-  if cals.get("vp") and state.get("vp_sync_event_id"):
-    gcal_request(
-        "PATCH",
-        f"/calendars/{urllib.parse.quote(cals['vp'], safe='')}/events/{urllib.parse.quote(state['vp_sync_event_id'], safe='')}",
-        body=body,
-    )
+  print("\nScheduled Meetings on Google Calendar:")
+  for ev in analysis["events"]:
+    marker = "📅 BOOKED 1:1" if ("1:1 with" in ev["summary"] or "Invite:" in ev["summary"]) else "❌ BUSY"
+    print(f"  - {ev['slot']}: {marker} ({ev['summary']})")
 
 
 def parse_slot_arg(slot_text: str) -> tuple[int, str, str]:
@@ -406,77 +484,113 @@ def parse_slot_arg(slot_text: str) -> tuple[int, str, str]:
     if dname in lower:
       day_offset = idx
       break
-  import re
   m = re.search(r"(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})", slot_text or "")
   if m:
     s_hm = m.group(1).zfill(5)
     e_hm = m.group(2).zfill(5)
     return day_offset, s_hm, e_hm
+  m_single = re.search(r"(\d{1,2}:\d{2})", slot_text or "")
+  if m_single:
+    s_hm = m_single.group(1).zfill(5)
+    dt = datetime.datetime.strptime(s_hm, "%H:%M") + datetime.timedelta(minutes=30)
+    return day_offset, s_hm, dt.strftime("%H:%M")
   return day_offset, "15:30", "16:00"
 
 
-def book_1on1_on_gcal(summary: str, invite_id: str, day_offset: int = 3, start_hm: str = "15:30", end_hm: str = "16:00", include_vp: bool = True):
+def find_event_at_slot(cal_id: str, day_offset: int, start_hm: str) -> dict | None:
+  target_iso = slot_iso(day_offset, start_hm)
+  target_dt = datetime.datetime.fromisoformat(target_iso)
+  for ev in list_week_events(cal_id):
+    s_raw = ev.get("start", {}).get("dateTime", "")
+    e_raw = ev.get("end", {}).get("dateTime", "")
+    if not s_raw or not e_raw:
+      continue
+    dt_s = datetime.datetime.fromisoformat(s_raw)
+    dt_e = datetime.datetime.fromisoformat(e_raw)
+    if dt_s <= target_dt < dt_e:
+      return ev
+  return None
+
+
+def move_meeting_dynamic(from_slot_str: str, to_slot_str: str) -> dict:
   state = load_state()
   cals = state.get("calendars", {})
+  from_day, from_s, _ = parse_slot_arg(from_slot_str)
+  to_day, to_s, to_e = parse_slot_arg(to_slot_str)
+
+  body_patch = {
+      "start": {"dateTime": slot_iso(to_day, to_s)},
+      "end": {"dateTime": slot_iso(to_day, to_e)},
+  }
+
+  moved_calendars = []
+  for cal_key in ("alex", "vp"):
+    cid = cals.get(cal_key)
+    if not cid:
+      continue
+    ev = find_event_at_slot(cid, from_day, from_s)
+    if ev and ev.get("id"):
+      new_summary = ev.get("summary", "Weekly Sync")
+      if "CAL-RESCHED-409" not in new_summary:
+        new_summary = f"{new_summary} [Rescheduled: CAL-RESCHED-409]"
+      gcal_request(
+          "PATCH",
+          f"/calendars/{urllib.parse.quote(cid, safe='')}/events/{urllib.parse.quote(ev['id'], safe='')}",
+          body={**body_patch, "summary": new_summary},
+      )
+      moved_calendars.append(CALENDARS[cal_key]["summary"])
+
+  return {
+      "status": "RESCHEDULED",
+      "moved_from": f"{DAY_NAMES[from_day]} {from_s}",
+      "moved_to": f"{DAY_NAMES[to_day]} {to_s}-{to_e}",
+      "reschedule_id": "CAL-RESCHED-409",
+      "updated_google_calendars": moved_calendars,
+  }
+
+
+def book_1on1_on_gcal(summary: str, invite_id: str, slot_str: str = "Thursday 15:30-16:00", include_vp: bool = True) -> dict:
+  state = load_state()
+  cals = state.get("calendars", {})
+  day_offset, start_hm, end_hm = parse_slot_arg(slot_str)
   full_summary = f"{summary} [Invite: {invite_id}]"
   if cals.get("my"):
     create_event(cals["my"], full_summary, day_offset, start_hm, end_hm, description=f"Invite ID: {invite_id}")
   if include_vp and cals.get("vp"):
     create_event(cals["vp"], full_summary, day_offset, start_hm, end_hm, description=f"Invite ID: {invite_id}")
+  return {
+      "status": "CONFIRMED",
+      "slot": f"{DAY_NAMES[day_offset]} {start_hm}-{end_hm}",
+      "calendar_invite_id": invite_id,
+      "google_calendar_synced": True,
+  }
 
 
-def get_vp_slots_live(round_number: int) -> dict:
+def get_vp_availability_live() -> dict:
   state = load_state()
   cal_id = state.get("calendars", {}).get("vp")
   if not cal_id:
     raise RuntimeError("No VP calendar in state")
-  events = list_week_events(cal_id)
-  busy = {format_slot_label(ev)[0]: ev for ev in events}
-  candidates = ["Tuesday 10:00-10:30", "Wednesday 14:00-14:30", "Thursday 11:00-11:30"]
-  open_slots = [s for s in candidates if s not in busy]
-  if round_number == 1:
-    return {"source": "Google Calendar API v3 (Demo: VP Yaroslav)", "open_slots": open_slots}
-  thu_ev = busy.get("Thursday 15:30-16:00", {})
+  analysis = analyze_calendar_week(cal_id)
   return {
       "source": "Google Calendar API v3 (Demo: VP Yaroslav)",
-      "open_slots": [],
-      "movable_internal_conflicts": [
-          {
-              "slot": "Thursday 15:30-16:00",
-              "google_calendar_event_id": thu_ev.get("id", state.get("vp_sync_event_id", "")),
-              "current_meeting": thu_ev.get("summary", "Weekly Sync: Yaroslav (VP) & Alex (Director of Platform)"),
-              "attendee_a2a_agent": os.environ.get("ALEX_AGENT_URL", "https://alex-schedule-bot.booth-demos.workers.dev"),
-              "suggested_reschedule_slot": "Friday 11:00-11:30",
-              "instruction": (
-                  "Call `reschedule_conflict_via_a2a` to ask Alex's A2A agent to move this sync"
-                  " from Thursday 15:30-16:00 to Friday 11:00-11:30, then call"
-                  " `confirm_and_book_slot` for Thursday 15:30-16:00."
-              ),
-          }
-      ],
+      "week_of": analysis["week_of"],
+      "open_30m_slots": analysis["open_30m_slots"],
+      "movable_internal_meetings": analysis["movable_internal_meetings"],
   }
 
 
-def get_alex_slots_live() -> dict:
+def get_alex_availability_live() -> dict:
   state = load_state()
   cal_id = state.get("calendars", {}).get("alex")
   if not cal_id:
     raise RuntimeError("No Alex calendar in state")
-  events = list_week_events(cal_id)
-  busy = {format_slot_label(ev)[0]: ev for ev in events}
-  thu_ev = busy.get("Thursday 15:30-16:00", {})
-  fri_free = "Friday 11:00-11:30" not in busy
+  analysis = analyze_calendar_week(cal_id)
   return {
       "source": "Google Calendar API v3 (Demo: Director Alex)",
-      "current_movable_meetings": [
-          {
-              "google_calendar_event_id": thu_ev.get("id", state.get("alex_sync_event_id", "")),
-              "title": thu_ev.get("summary", "Weekly Sync: Yaroslav (VP) & Alex"),
-              "slot": "Thursday 15:30-16:00",
-              "movable": True,
-          }
-      ],
-      "open_slots_for_reschedule": ["Friday 11:00-11:30"] if fri_free else [],
+      "week_of": analysis["week_of"],
+      "open_30m_slots": analysis["open_30m_slots"],
+      "movable_internal_meetings": analysis["movable_internal_meetings"],
   }
 
 
@@ -489,14 +603,17 @@ if __name__ == "__main__":
     reset_and_seed(proj, sa, usr)
   elif cmd == "my-calendar":
     print_my_calendar()
-  elif cmd == "vp-slots":
-    rnd = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-    print(json.dumps(get_vp_slots_live(rnd), indent=2))
-  elif cmd == "alex-slots":
-    print(json.dumps(get_alex_slots_live(), indent=2))
+  elif cmd == "vp-availability":
+    print(json.dumps(get_vp_availability_live(), indent=2))
+  elif cmd == "alex-availability":
+    print(json.dumps(get_alex_availability_live(), indent=2))
   elif cmd == "move-sync":
-    move_alex_and_vp_sync()
+    from_arg = sys.argv[2] if len(sys.argv) > 2 else "Thursday 15:30-16:00"
+    to_arg = sys.argv[3] if len(sys.argv) > 3 else "Friday 11:00-11:30"
+    print(json.dumps(move_meeting_dynamic(from_arg, to_arg), indent=2))
   elif cmd == "book-vp":
-    book_1on1_on_gcal("1:1 with Yaroslav, VP of Engineering", "CAL-INV-8842", include_vp=True)
+    slot_arg = sys.argv[2] if len(sys.argv) > 2 else "Thursday 15:30-16:00"
+    print(json.dumps(book_1on1_on_gcal("1:1 with Yaroslav, VP of Engineering", "CAL-INV-8842", slot_arg, include_vp=True), indent=2))
   elif cmd == "book-ea":
-    book_1on1_on_gcal("1:1 with VP Sarah Chen (Confirmed via EA email)", "CAL-EA-104", include_vp=False)
+    slot_arg = sys.argv[2] if len(sys.argv) > 2 else "Thursday 15:30-16:00"
+    print(json.dumps(book_1on1_on_gcal("1:1 with VP Sarah Chen (Confirmed via EA email)", "CAL-EA-104", slot_arg, include_vp=False), indent=2))

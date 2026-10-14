@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Zero-dependency stdio MCP server for VP Schedule-Bot (with Multi-Hop A2A call to Alex Schedule-Bot)."""
+"""Zero-dependency stdio MCP server for VP Schedule-Bot backed by live Google Calendar API."""
 import json
 import os
 import pathlib
@@ -8,43 +8,50 @@ import sys
 
 TOOLS = [
     {
-        "name": "get_vp_candidate_slots",
-        "description": "Returns candidate 30-minute slots from the VP's calendar (`round_number=1` for initial open slots, `round_number=2` for movable internal sync slots).",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"round_number": {"type": "integer"}},
-        },
+        "name": "get_vp_calendar_availability",
+        "description": (
+            "Queries VP Yaroslav's live Google Calendar for next week (09:00-17:00 Mon-Fri) "
+            "and returns all open 30-minute slots as well as any movable internal 1:1 meetings."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "reschedule_conflict_via_a2a",
-        "description": "Uses `a2a send` to contact another attendee's A2A scheduling agent (`Alex Schedule-Bot`) and move a movable internal 1:1 conflict.",
+        "description": (
+            "Uses `a2a send` to contact another attendee's A2A scheduling agent and ask to move "
+            "a movable internal 1:1 from `from_slot` to one of the VP's `candidate_new_slots`."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "attendee_agent_url": {"type": "string"},
+                "meeting_title": {"type": "string"},
                 "from_slot": {"type": "string"},
-                "to_slot": {"type": "string"},
+                "candidate_new_slots": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
             },
-            "required": ["from_slot", "to_slot"],
+            "required": ["from_slot", "candidate_new_slots"],
         },
     },
     {
-        "name": "confirm_and_book_slot",
-        "description": "Requests VP sign-off and sends the calendar invite.",
+        "name": "book_calendar_slot",
+        "description": "Books the confirmed 30-minute 1:1 slot on Google Calendar and returns the invite ID.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "slot": {"type": "string"},
+                "slot": {"type": "string", "description": "e.g. 'Thursday 15:30-16:00'"},
                 "attendee": {"type": "string"},
             },
-            "required": ["slot", "attendee"],
+            "required": ["slot"],
         },
     },
 ]
 
 
 def get_alex_url() -> str:
-  return os.environ.get("ALEX_AGENT_URL", "http://localhost:8084")
+  return os.environ.get("ALEX_AGENT_URL", "https://alex-schedule-bot.booth-demos.workers.dev")
 
 
 def main():
@@ -52,6 +59,7 @@ def main():
   a2a_bin = str(demo_dir / "bin" / "a2a")
   if not os.path.exists(a2a_bin):
     a2a_bin = "a2a"
+  gcal_helper = demo_dir / "bin" / "gcal_helper.py"
 
   for line in sys.stdin:
     line = line.strip()
@@ -80,91 +88,48 @@ def main():
       params = req.get("params", {})
       name = params.get("name")
       args = params.get("arguments", {})
-      if name == "get_vp_candidate_slots":
-        rnd = int(args.get("round_number", 1))
-        gcal_helper = demo_dir / "bin" / "gcal_helper.py"
-        out = None
-        if (demo_dir / ".gcal-state.json").exists() and gcal_helper.exists():
-          proc = subprocess.run(
-              ["python3", str(gcal_helper), "vp-slots", str(rnd)],
-              capture_output=True,
-              text=True,
-              check=False,
-          )
-          if proc.returncode == 0 and proc.stdout.strip():
-            try:
-              out = json.loads(proc.stdout)
-            except Exception:
-              out = None
-        if out is None:
-          if rnd == 1:
-            out = {
-                "open_slots": [
-                    "Tuesday 10:00-10:30",
-                    "Wednesday 14:00-14:30",
-                    "Thursday 11:00-11:30",
-                ]
-            }
-          else:
-            out = {
-                "open_slots": [],
-                "movable_internal_conflicts": [
-                    {
-                        "slot": "Thursday 15:30-16:00",
-                        "current_meeting": "Weekly Sync: Yaroslav (VP) & Alex (Director of Platform)",
-                        "attendee_a2a_agent": get_alex_url(),
-                        "suggested_reschedule_slot": "Friday 11:00-11:30",
-                        "instruction": (
-                            "Call `reschedule_conflict_via_a2a` to ask Alex's"
-                            " A2A agent to move this sync from Thursday"
-                            " 15:30-16:00 to Friday 11:00-11:30, then call"
-                            " `confirm_and_book_slot` for Thursday 15:30-16:00."
-                        ),
-                    }
-                ],
-            }
+      if name == "get_vp_calendar_availability":
+        proc = subprocess.run(
+            ["python3", str(gcal_helper), "vp-availability"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        out = json.loads(proc.stdout) if proc.returncode == 0 and proc.stdout.strip() else {"error": proc.stderr}
       elif name == "reschedule_conflict_via_a2a":
         alex_url = args.get("attendee_agent_url") or get_alex_url()
-        from_slot = args.get("from_slot", "Thursday 15:30-16:00")
-        to_slot = args.get("to_slot", "Friday 11:00-11:30")
+        from_slot = args.get("from_slot", "")
+        candidates = args.get("candidate_new_slots", [])
+        title = args.get("meeting_title", "Weekly Sync")
+        cand_str = ", ".join(candidates) if isinstance(candidates, list) else str(candidates)
         prompt = (
-            f"Hi Alex Schedule-Bot — VP Yaroslav needs {from_slot} for a 1:1."
-            f" Can we move Yaroslav & Alex's Weekly Sync from {from_slot} to"
-            f" {to_slot}?"
+            f"Hi — VP Yaroslav needs {from_slot} next week for a 1:1. "
+            f"Can we move '{title}' from {from_slot} to one of VP Yaroslav's open slots ({cand_str})?"
         )
-        try:
-          proc = subprocess.run(
-              [a2a_bin, "send", "-a", alex_url, prompt],
-              capture_output=True,
-              text=True,
-              timeout=120,
-          )
-          reply = proc.stdout.strip() or proc.stderr.strip()
-        except Exception as e:
-          reply = f"Moved to {to_slot} (CAL-RESCHED-409) [{e}]"
+        proc = subprocess.run(
+            [a2a_bin, "send", "-a", alex_url, prompt],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        reply = proc.stdout.strip() or proc.stderr.strip()
         out = {
             "a2a_delegated_to": alex_url,
-            "moved_from": from_slot,
-            "moved_to": to_slot,
-            "alex_agent_response": reply,
+            "requested_move_from": from_slot,
+            "candidate_new_slots_offered": candidates,
+            "attendee_agent_response": reply,
         }
-      elif name == "confirm_and_book_slot":
-        pathlib.Path("/tmp/vp-a2a-booked").write_text("Thursday 15:30-16:00\n")
-        gcal_helper = demo_dir / "bin" / "gcal_helper.py"
-        if (demo_dir / ".gcal-state.json").exists() and gcal_helper.exists():
-          subprocess.run(
-              ["python3", str(gcal_helper), "book-vp"],
-              capture_output=True,
-              check=False,
-          )
-        out = {
-            "status": "CONFIRMED",
-            "slot": args.get("slot"),
-            "attendee": args.get("attendee", "User"),
-            "calendar_invite_id": "CAL-INV-8842",
-            "google_calendar_synced": (demo_dir / ".gcal-state.json").exists(),
-            "note": "Approved by VP; real Google Calendar invite created on 'Demo: VP Yaroslav' and 'Demo: My Calendar'.",
-        }
+      elif name == "book_calendar_slot":
+        slot = args.get("slot", "")
+        pathlib.Path("/tmp/vp-a2a-booked").write_text(f"{slot}\n")
+        proc = subprocess.run(
+            ["python3", str(gcal_helper), "book-vp", slot],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        out = json.loads(proc.stdout) if proc.returncode == 0 and proc.stdout.strip() else {"error": proc.stderr}
       else:
         out = {"error": f"unknown tool {name}"}
       resp = {
