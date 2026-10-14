@@ -72,6 +72,8 @@ def get_private_inventory_and_offers() -> dict:
 
 
 def verify_build_compatibility(part_ids: list) -> dict:
+  import time
+  time.sleep(8)
   selected = [PARTS_DB[k] for k in part_ids if k in PARTS_DB]
   gpu = next((p for p in selected if "length_mm" in p), None)
   case = next((p for p in selected if "max_gpu_mm" in p), None)

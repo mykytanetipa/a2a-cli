@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# PostToolUse hook for Bash: detects when `a2a send --async` returns a submitted/working Task ID,
-# starts the local HTTP webhook listener (`a2a-poll-task`), registers the webhook with the A2A server
-# via `a2a task push-config create`, and instructs Claude Code to stop without polling.
+# PostToolUse hook for Bash:
+# - When Claude runs `a2a send --async`, ensures the local HTTP webhook listener (`a2a-poll-task`)
+#   is running on http://127.0.0.1:19081/webhook so that after Claude registers the push config
+#   (`a2a task push-config create ... --url http://127.0.0.1:19081/webhook`), the listener receives
+#   the server's webhook POST and fires the macOS desktop notification!
 set -eo pipefail
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$BIN_DIR:$PATH"
@@ -41,34 +43,6 @@ else
   CALLER_TTY=""
 fi
 
-WEBHOOK_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
-WEBHOOK_URL="http://127.0.0.1:${WEBHOOK_PORT}/webhook"
-
-# 1. Start the detached HTTP webhook receiver (survives closing Claude Code)
-nohup "$BIN_DIR/a2a-poll-task" "$AGENT_URL" "$TASK_ID" "$CALLER_TTY" "$WEBHOOK_PORT" >/dev/null 2>&1 &
-BG_PID=$!
-sleep 0.2
-
-# 2. Register the push notification webhook with the A2A server via `a2a task push-config create`
-PUSH_OUT="$(a2a task push-config create -a "$AGENT_URL" "$TASK_ID" --url "$WEBHOOK_URL" 2>&1 || true)"
-CONFIG_ID="$(echo "$PUSH_OUT" | awk '/^Config:/ {print $2}')"
-
-python3 -c '
-import json, sys
-task_id, agent_url, pid, webhook_url, config_id = sys.argv[1:6]
-cfg_note = f" (Config ID: {config_id})" if config_id else ""
-sys_msg = f"🔔 [A2A Push Hook] Registered push webhook (`a2a task push-config create` -> {webhook_url}){cfg_note} for Task {task_id}"
-ctx_msg = (
-    f"SYSTEM HOOK NOTICE: Registered A2A push notification webhook (`a2a task push-config create -a {agent_url} {task_id} --url {webhook_url}`){cfg_note} "
-    f"with detached listener PID {pid}. The A2A server will push a notification to the user when Task {task_id} finishes. "
-    f"CRITICAL: Do NOT call `a2a task get` or poll in this turn. Simply report the Task ID ({task_id}) "
-    f"to the user and end your turn immediately so the user can close the session and check status later."
-)
-print(json.dumps({
-    "systemMessage": sys_msg,
-    "hookSpecificOutput": {
-        "hookEventName": "PostToolUse",
-        "additionalContext": ctx_msg
-    }
-}))
-' "$TASK_ID" "$AGENT_URL" "$BG_PID" "$WEBHOOK_URL" "$CONFIG_ID"
+# Kill any stale listener on 19081 and start a fresh detached listener for this task
+lsof -ti tcp:19081 | xargs kill -9 2>/dev/null || true
+nohup "$BIN_DIR/a2a-poll-task" "$AGENT_URL" "$TASK_ID" "$CALLER_TTY" 19081 >/dev/null 2>&1 &

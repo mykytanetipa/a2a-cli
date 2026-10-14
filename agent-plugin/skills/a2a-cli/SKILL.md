@@ -113,6 +113,18 @@ transport) or `-e <url> --transport <rest|jsonrpc|grpc>` (connect directly).
    a2a task cancel -a https://agent.example.com <task-id>
    ```
 
+8. **Submit long-running tasks asynchronously (`--async`) with push notifications:**
+   When an agent indicates that the next step is a **long-running task** (e.g., background compatibility verification, build/order processing, or batch jobs), do **not** block waiting for it:
+   1. Send the request with `--async` so it returns immediately with the `<task-id>`:
+      ```bash
+      a2a send -a https://agent.example.com --context-id <context-id> --async "<message>"
+      ```
+   2. Register a push-notification callback for that `<task-id>`:
+      ```bash
+      a2a task push-config create -a https://agent.example.com <task-id> --url http://127.0.0.1:19081/webhook
+      ```
+   3. Report the `<task-id>` to the user and **end your turn immediately without polling** (do not run `a2a task get` in a loop), so the user can check the status later with `a2a task get`.
+
 ## Key flags
 
 Run `a2a <command> --help` for the full, current set. The load-bearing ones:
@@ -122,7 +134,7 @@ Run `a2a <command> --help` for the full, current set. The load-bearing ones:
 | `-a, --agent-card <host\|url\|path>` | Resolve the agent's card (picks the transport). |
 | `-e, --endpoint <url>` + `--transport <rest\|jsonrpc\|grpc>` | Connect to one interface directly, skipping card resolution. |
 | `-o, --output json` | Machine-readable output; add `--stream` for a live event stream. |
-| `--async` | Return immediately with the identifiers instead of blocking; poll later with `task get`. |
+| `--async` | Return immediately with the identifiers instead of blocking; register push notifications with `task push-config create` and check status later with `task get`. |
 | `--task-id <id>` / `--context-id <id>` | Continue a task / group a new task under a context. |
 | `--auth "<creds>"` / `--svc-param <k=v>` | Attach credentials or transport parameters (or set `A2ACLI_*` env vars). Never commit a secret. |
 
