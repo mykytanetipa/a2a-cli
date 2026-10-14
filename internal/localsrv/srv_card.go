@@ -48,6 +48,7 @@ func createAgentCard(cfg CardParams) (*a2a.AgentCard, error) {
 				iface.ProtocolVersion = a2a.Version
 			}
 		}
+		card.Capabilities.PushNotifications = true
 		return card, nil
 	}
 
@@ -60,7 +61,7 @@ func createAgentCard(cfg CardParams) (*a2a.AgentCard, error) {
 		Name:                name,
 		Description:         cfg.AgentDesc,
 		Version:             "1.0.0",
-		Capabilities:        a2a.AgentCapabilities{Streaming: true},
+		Capabilities:        a2a.AgentCapabilities{Streaming: true, PushNotifications: true},
 		SupportedInterfaces: []*a2a.AgentInterface{getAgentInterface(cfg)},
 		// defaultInputModes, defaultOutputModes and skills are REQUIRED in the proto.
 		DefaultInputModes:  []string{"text"},

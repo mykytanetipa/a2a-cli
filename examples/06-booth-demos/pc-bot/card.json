@@ -2,7 +2,7 @@
   "name": "PC Build-a-Bot (RigFoundry)",
   "description": "Expert custom gaming PC builder with private warehouse inventory, millimeter physical compatibility verification, and unadvertised bundle deals.",
   "version": "1.0.0",
-  "capabilities": { "streaming": true },
+  "capabilities": { "streaming": true, "pushNotifications": true },
   "defaultInputModes": ["text"],
   "defaultOutputModes": ["text"],
   "supportedInterfaces": [

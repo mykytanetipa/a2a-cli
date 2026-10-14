@@ -65,3 +65,4 @@ aiwt-*
 # generated demo recording (intermediate; run.sh regenerates it)
 docs/demo/a2a-demo.cast
 .deployed-urls.env
+examples/06-booth-demos/bin/a2a

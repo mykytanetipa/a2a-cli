@@ -28,6 +28,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
+	"github.com/a2aproject/a2a-go/v2/a2asrv/push"
 )
 
 // ServeExec runs a local server whose agent executes the given shell command
@@ -45,9 +46,14 @@ func ServeExec(ctx context.Context, cfg Config, command, chunk string) error {
 		return err
 	}
 
-	caps := &a2a.AgentCapabilities{Streaming: chunk != ""}
+	caps := &a2a.AgentCapabilities{Streaming: chunk != "", PushNotifications: true}
 	executor := newExecExecutor(command, chunk)
-	handler := a2asrv.NewHandler(executor, a2asrv.WithCapabilityChecks(caps))
+	pushSender := push.NewHTTPPushSender(&push.HTTPSenderConfig{AllowPrivateNetworks: true})
+	handler := a2asrv.NewHandler(
+		executor,
+		a2asrv.WithCapabilityChecks(caps),
+		a2asrv.WithPushNotifications(push.NewInMemoryStore(), pushSender),
+	)
 
 	if !cfg.Quiet {
 		cfg.Logger("exec mode, command=%q chunk=%q transport=%s protocol=%s", command, chunk, cfg.Transport, cfg.ProtocolVersion)

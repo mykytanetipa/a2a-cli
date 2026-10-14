@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Polls `a2a task get` in the background (survives closing Claude Code) and fires:
-# 1. macOS Notification Center banner (`osascript`)
-# 2. macOS Glass notification chime (`afplay`)
-# 3. Live terminal push notification banner to the caller's TTY
+# Starts a local HTTP webhook listener and registers it with the A2A server via
+# `a2a task push-config create <task-id> --url http://127.0.0.1:<port>/webhook`.
+# When the A2A server pushes `TASK_STATE_COMPLETED` to the webhook, triggers the macOS notification!
 set -eo pipefail
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$BIN_DIR:$PATH"
@@ -10,22 +9,46 @@ export PATH="$BIN_DIR:$PATH"
 AGENT_URL="${1:-http://localhost:8081}"
 TASK_ID="${2:-}"
 CALLER_TTY="${3:-}"
+WEBHOOK_PORT="${4:-19081}"
 if [[ -z "$TASK_ID" ]]; then
   exit 0
 fi
 
-for _ in $(seq 1 90); do
-  OUT="$(a2a task get -a "$AGENT_URL" "$TASK_ID" 2>/dev/null || true)"
-  if echo "$OUT" | grep -qE "^Status:\s+completed"; then
-    osascript -e "display notification \"Task ${TASK_ID} completed — \$999 White+Walnut Build verified & ready!\" with title \"🔔 A2A Task Completed (RigFoundry)\" sound name \"Glass\"" 2>/dev/null || true
-    afplay /System/Library/Sounds/Glass.aiff 2>/dev/null &
-    if [[ -n "$CALLER_TTY" && -w "$CALLER_TTY" ]]; then
-      printf "\n\033[1;32m🔔 [A2A PUSH NOTIFICATION] Task %s is now COMPLETED on RigFoundry (\$999 Build Verified)!\033[0m\n" "$TASK_ID" > "$CALLER_TTY" 2>/dev/null || true
-    fi
-    exit 0
-  fi
-  if echo "$OUT" | grep -qE "^Status:\s+(failed|canceled)"; then
-    exit 0
-  fi
-  sleep 2
-done
+python3 - "$TASK_ID" "$CALLER_TTY" "$WEBHOOK_PORT" << 'PYEOF'
+import json, subprocess, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+task_id = sys.argv[1]
+caller_tty = sys.argv[2]
+port = int(sys.argv[3])
+
+def notify():
+    subprocess.run([
+        "osascript", "-e",
+        f'display notification "Task {task_id} completed — $999 White+Walnut Build verified & ready!" with title "🔔 A2A Push Notification (RigFoundry)" sound name "Glass"'
+    ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen(["afplay", "/System/Library/Sounds/Glass.aiff"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if caller_tty:
+        try:
+            with open(caller_tty, "w") as f:
+                f.write(f"\n\033[1;32m🔔 [A2A PUSH NOTIFICATION] Webhook received TASK_STATE_COMPLETED for Task {task_id}!\033[0m\n")
+        except Exception:
+            pass
+
+class WebhookHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length).decode("utf-8", errors="replace")
+        self.send_response(200)
+        self.end_headers()
+        if "TASK_STATE_COMPLETED" in raw or '"completed"' in raw.lower():
+            notify()
+            raise SystemExit(0)
+    def log_message(self, *args):
+        pass
+
+srv = HTTPServer(("127.0.0.1", port), WebhookHandler)
+srv.timeout = 180
+while True:
+    srv.handle_request()
+PYEOF

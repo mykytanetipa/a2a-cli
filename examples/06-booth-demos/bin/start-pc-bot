@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "$DEMO_DIR/../.." && pwd)"
 export PATH="$DEMO_DIR/bin:$PATH"
+
+echo "🔨 Building a2a CLI (with PushNotifications enabled)..."
+go -C "$REPO_ROOT" build -o "$DEMO_DIR/bin/a2a" .
 
 cat > "$DEMO_DIR/pc-bot/mcp.json" << EOF
 {
@@ -14,6 +18,6 @@ cat > "$DEMO_DIR/pc-bot/mcp.json" << EOF
 }
 EOF
 
-exec a2a server --host 127.0.0.1 --port 8081 \
+exec "$DEMO_DIR/bin/a2a" server --host 127.0.0.1 --port 8081 \
   --card "$DEMO_DIR/pc-bot/card.json" \
   --exec "$DEMO_DIR/pc-bot/run_agent.sh"

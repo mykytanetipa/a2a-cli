@@ -127,7 +127,7 @@ const RIGFOUNDRY_CARD = {
   description:
     "Expert custom gaming PC builder at RigFoundry with private warehouse inventory, unadvertised VIP bundle discounts (saving up to $100 vs MockEgg public retail), and millimeter physical compatibility verification.",
   version: "1.0.0",
-  capabilities: { streaming: true },
+  capabilities: { streaming: true, pushNotifications: true },
   defaultInputModes: ["text"],
   defaultOutputModes: ["text"],
   supportedInterfaces: [

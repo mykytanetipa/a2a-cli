@@ -21,6 +21,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
+	"github.com/a2aproject/a2a-go/v2/a2asrv/push"
 )
 
 // ServeEcho runs a local server whose agent echoes each incoming message back
@@ -38,7 +39,11 @@ func ServeEcho(ctx context.Context, cfg Config) error {
 		return err
 	}
 
-	handler := a2asrv.NewHandler(&echoExecutor{})
+	pushSender := push.NewHTTPPushSender(&push.HTTPSenderConfig{AllowPrivateNetworks: true})
+	handler := a2asrv.NewHandler(
+		&echoExecutor{},
+		a2asrv.WithPushNotifications(push.NewInMemoryStore(), pushSender),
+	)
 
 	if !cfg.Quiet {
 		cfg.Logger("echo mode, transport=%s protocol=%s", cfg.Transport, cfg.ProtocolVersion)
