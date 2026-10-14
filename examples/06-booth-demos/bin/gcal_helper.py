@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real Google Calendar API v3 integration for Demo 2 (My Calendar, VP Yaroslav, Director Alex)."""
+"""Real Google Calendar API v3 integration for Demo 2 using Service Account impersonation."""
 import datetime
 import json
 import os
@@ -14,13 +14,21 @@ import urllib.request
 DEMO_DIR = pathlib.Path(__file__).resolve().parent.parent
 STATE_FILE = DEMO_DIR / ".gcal-state.json"
 TOKEN_CACHE = pathlib.Path("/tmp/a2a-gcal-token.json")
-ADC_FILE = pathlib.Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
 
 CALENDARS = {
     "my": {"summary": "Demo: My Calendar", "colorId": "14"},
     "vp": {"summary": "Demo: VP Yaroslav", "colorId": "3"},
     "alex": {"summary": "Demo: Director Alex", "colorId": "6"},
 }
+
+
+def load_state() -> dict:
+  if not STATE_FILE.exists():
+    return {}
+  try:
+    return json.loads(STATE_FILE.read_text())
+  except Exception:
+    return {}
 
 
 def get_access_token_and_project():
@@ -35,48 +43,36 @@ def get_access_token_and_project():
     except Exception:
       pass
 
-  quota_project = ""
-  if STATE_FILE.exists():
-    try:
-      quota_project = json.loads(STATE_FILE.read_text()).get("quota_project", "")
-    except Exception:
-      pass
+  state = load_state()
+  sa_email = state.get("sa_email", "")
+  quota_project = state.get("quota_project", "")
 
-  if ADC_FILE.exists():
-    try:
-      adc = json.loads(ADC_FILE.read_text())
-      if not quota_project:
-        quota_project = adc.get("quota_project_id", "")
-      if adc.get("type") == "authorized_user" and adc.get("refresh_token"):
-        data = urllib.parse.urlencode({
-            "client_id": adc["client_id"],
-            "client_secret": adc["client_secret"],
-            "refresh_token": adc["refresh_token"],
-            "grant_type": "refresh_token",
-        }).encode()
-        req = urllib.request.Request("https://oauth2.googleapis.com/token", data=data, method="POST")
-        with urllib.request.urlopen(req, timeout=10) as resp:
-          tok = json.loads(resp.read().decode())
-          access_token = tok["access_token"]
-          TOKEN_CACHE.write_text(json.dumps({
-              "access_token": access_token,
-              "expires_at": time.time() + int(tok.get("expires_in", 3600)),
+  if sa_email:
+    proc = subprocess.run(
+        [
+            "gcloud",
+            "auth",
+            "print-access-token",
+            f"--impersonate-service-account={sa_email}",
+            "--scopes=https://www.googleapis.com/auth/calendar",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode == 0 and proc.stdout.strip():
+      token = proc.stdout.strip()
+      TOKEN_CACHE.write_text(
+          json.dumps({
+              "access_token": token,
+              "expires_at": time.time() + 3000,
               "quota_project": quota_project,
-          }))
-          return access_token, quota_project
-    except Exception:
-      pass
+          })
+      )
+      return token, quota_project
 
-  proc = subprocess.run(
-      ["gcloud", "auth", "application-default", "print-access-token"],
-      capture_output=True,
-      text=True,
-      check=False,
-  )
-  if proc.returncode == 0 and proc.stdout.strip():
-    return proc.stdout.strip(), quota_project
   raise RuntimeError(
-      "No Google Calendar credentials found. Run ./examples/06-booth-demos/bin/reset-calendars first."
+      "Google Calendar token not initialized. Run ./examples/06-booth-demos/bin/reset-calendars first."
   )
 
 
@@ -122,8 +118,7 @@ def local_tz_offset() -> str:
   return f"{sign}{total_minutes // 60:02d}:{total_minutes % 60:02d}"
 
 
-def slot_iso(day_offset: int, hh_mm: str) -> tuple[str, str]:
-  """day_offset: 1=Tuesday, 2=Wednesday, 3=Thursday, 4=Friday."""
+def slot_iso(day_offset: int, hh_mm: str) -> str:
   monday = current_week_monday()
   target_date = monday + datetime.timedelta(days=day_offset)
   tz = local_tz_offset()
@@ -170,20 +165,21 @@ def clear_week_events(cal_id: str):
         pass
 
 
-def load_state() -> dict:
-  if not STATE_FILE.exists():
-    return {}
-  try:
-    return json.loads(STATE_FILE.read_text())
-  except Exception:
-    return {}
-
-
-def reset_and_seed(quota_project: str = ""):
-  if quota_project:
-    STATE_FILE.write_text(json.dumps({"quota_project": quota_project}, indent=2))
-    if TOKEN_CACHE.exists():
-      TOKEN_CACHE.unlink()
+def reset_and_seed(quota_project: str = "", sa_email: str = "", user_email: str = ""):
+  prev = load_state()
+  STATE_FILE.write_text(
+      json.dumps(
+          {
+              **prev,
+              "quota_project": quota_project or prev.get("quota_project", ""),
+              "sa_email": sa_email or prev.get("sa_email", ""),
+              "user_email": user_email or prev.get("user_email", ""),
+          },
+          indent=2,
+      )
+  )
+  if TOKEN_CACHE.exists():
+    TOKEN_CACHE.unlink()
 
   cal_list = gcal_request("GET", "/users/me/calendarList").get("items", [])
   by_summary = {c.get("summary"): c.get("id") for c in cal_list}
@@ -195,6 +191,15 @@ def reset_and_seed(quota_project: str = ""):
       print(f"📅 Creating Google Calendar: {meta['summary']}...")
       created = gcal_request("POST", "/calendars", body={"summary": meta["summary"]})
       cal_id = created["id"]
+    if user_email:
+      try:
+        gcal_request(
+            "POST",
+            f"/calendars/{urllib.parse.quote(cal_id, safe='')}/acl",
+            body={"role": "owner", "scope": {"type": "user", "value": user_email}},
+        )
+      except Exception:
+        pass
     try:
       gcal_request(
           "PATCH",
@@ -244,6 +249,8 @@ def reset_and_seed(quota_project: str = ""):
 
   state = {
       "quota_project": quota_project,
+      "sa_email": sa_email,
+      "user_email": user_email,
       "calendars": cal_ids,
       "vp_sync_event_id": vp_sync["id"],
       "alex_sync_event_id": alex_sync["id"],
@@ -251,6 +258,9 @@ def reset_and_seed(quota_project: str = ""):
   }
   STATE_FILE.write_text(json.dumps(state, indent=2))
   print("✅ All 3 Google Calendars seeded for this week!")
+  for key, meta in CALENDARS.items():
+    cid = urllib.parse.quote(cal_ids[key])
+    print(f"   🔗 Add '{meta['summary']}' to your Google Calendar UI: https://calendar.google.com/calendar/u/0/r?cid={cid}")
 
 
 def format_slot_label(ev: dict) -> tuple[str, str]:
@@ -387,7 +397,9 @@ if __name__ == "__main__":
   cmd = sys.argv[1] if len(sys.argv) > 1 else ""
   if cmd == "reset":
     proj = sys.argv[2] if len(sys.argv) > 2 else ""
-    reset_and_seed(proj)
+    sa = sys.argv[3] if len(sys.argv) > 3 else ""
+    usr = sys.argv[4] if len(sys.argv) > 4 else ""
+    reset_and_seed(proj, sa, usr)
   elif cmd == "my-calendar":
     print_my_calendar()
   elif cmd == "vp-slots":

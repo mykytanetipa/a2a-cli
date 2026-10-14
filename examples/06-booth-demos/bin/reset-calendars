@@ -1,26 +1,40 @@
 #!/usr/bin/env bash
-# Authenticates with Google Calendar API (if needed), creates the 3 dedicated
-# Demo calendars ("Demo: My Calendar", "Demo: VP Yaroslav", "Demo: Director Alex"),
-# clears current-week demo events, and seeds this week's initial schedule.
+# Sets up a Service Account in your active GCP project, enables Google Calendar API,
+# creates the 3 Demo Google Calendars ("Demo: My Calendar", "Demo: VP Yaroslav",
+# "Demo: Director Alex"), shares them with your Google account, and seeds this week's schedule.
 set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 rm -f /tmp/ea-email-round /tmp/ea-email-booked /tmp/vp-a2a-booked /tmp/a2a-gcal-token.json
 
 PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
-if [[ "$PROJECT_ID" == "(unset)" ]]; then
-  PROJECT_ID=""
+USER_EMAIL="$(gcloud config get-value account 2>/dev/null || true)"
+
+if [[ -z "$PROJECT_ID" || "$PROJECT_ID" == "(unset)" ]]; then
+  echo "❌ No active gcloud project set. Run: gcloud config set project <YOUR_GCP_PROJECT_ID>"
+  exit 1
 fi
 
-if ! python3 "$DEMO_DIR/bin/gcal_helper.py" reset "$PROJECT_ID" 2>/dev/null; then
-  echo "🔐 Logging in with Google Calendar scope via gcloud..."
-  gcloud auth application-default login \
-    --scopes="https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/cloud-platform"
-  if [[ -n "$PROJECT_ID" ]]; then
-    gcloud services enable calendar-json.googleapis.com --project="$PROJECT_ID" >/dev/null 2>&1 || true
+SA_NAME="a2a-cal-demo"
+SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+if [[ ! -f "$DEMO_DIR/.gcal-state.json" ]]; then
+  echo "🔧 Enabling Google Calendar API & IAM Credentials API on project '$PROJECT_ID'..."
+  gcloud services enable calendar-json.googleapis.com iamcredentials.googleapis.com --project="$PROJECT_ID"
+
+  if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "🤖 Creating Service Account '$SA_EMAIL'..."
+    gcloud iam service-accounts create "$SA_NAME" \
+      --display-name="A2A Booth Demo Calendar Agent" \
+      --project="$PROJECT_ID"
+    sleep 3
   fi
-  rm -f /tmp/a2a-gcal-token.json
-  python3 "$DEMO_DIR/bin/gcal_helper.py" reset "$PROJECT_ID"
+
+  echo "🔑 Granting Token Creator permission to '$USER_EMAIL' on '$SA_EMAIL'..."
+  gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
+    --member="user:${USER_EMAIL}" \
+    --role="roles/iam.serviceAccountTokenCreator" \
+    --project="$PROJECT_ID" >/dev/null
+  sleep 2
 fi
 
-echo ""
-echo "🌐 Open https://calendar.google.com/calendar/u/0/r/week to watch all 3 calendars live!"
+python3 "$DEMO_DIR/bin/gcal_helper.py" reset "$PROJECT_ID" "$SA_EMAIL" "$USER_EMAIL"
