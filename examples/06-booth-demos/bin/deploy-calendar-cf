@@ -3,32 +3,30 @@ set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WORKER_DIR="$DEMO_DIR/calendar-worker"
 
-echo "🚀 Deploying Demo 2 A2A Agents to Cloudflare Workers..."
-cd "$WORKER_DIR"
+echo "📦 Installing @a2a-js/sdk in calendar-worker..."
+npm --prefix "$WORKER_DIR" install --no-audit --no-fund
 
-deploy_worker() {
-  local name="$1"
-  echo "──► Deploying $name..." >&2
-  local out
-  out="$(npx --yes wrangler deploy --name "$name" 2>&1)"
-  echo "$out" >&2
-  local url
-  url="$(echo "$out" | grep -Eo 'https://[a-zA-Z0-9._-]+\.workers\.dev' | tail -n 1)"
-  echo "$url"
-}
-
-VP_URL="$(deploy_worker "vp-schedule-bot")"
-ALEX_URL="$(deploy_worker "alex-schedule-bot")"
-SARAH_URL="$(deploy_worker "vp-sarah")"
-
-cat > "$WORKER_DIR/.deployed-urls.env" << EOF
-VP_AGENT_URL="${VP_URL}"
-ALEX_AGENT_URL="${ALEX_URL}"
-SARAH_PROFILE_URL="${SARAH_URL}"
-EOF
+echo "🚀 Deploying vp-schedule-bot (Sarah Chen's @a2a-js/sdk A2A Agent)..."
+OUT1=$(npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name vp-schedule-bot 2>&1 | tee /dev/stderr)
+VP_URL=$(echo "$OUT1" | grep -Eo 'https://vp-schedule-bot\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 || true)
 
 echo ""
-echo "✅ Cloudflare Workers deployed and saved to calendar-worker/.deployed-urls.env:"
-echo "   • VP Schedule-Bot (A2A):   ${VP_URL}"
-echo "   • Alex Schedule-Bot (A2A): ${ALEX_URL}"
-echo "   • VP Sarah (No-A2A 404):   ${SARAH_URL}"
+echo "🚀 Deploying alex-schedule-bot (Alex Rivera's @a2a-js/sdk A2A Agent)..."
+OUT2=$(npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name alex-schedule-bot 2>&1 | tee /dev/stderr)
+ALEX_URL=$(echo "$OUT2" | grep -Eo 'https://alex-schedule-bot\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 || true)
+
+if [[ -n "$VP_URL" ]]; then
+  echo "$VP_URL" > "$DEMO_DIR/.calendar-cf-url"
+  SUBDOMAIN=$(echo "$VP_URL" | sed -E 's#https://vp-schedule-bot\.([^.]+)\.workers\.dev#\1#')
+  echo "$SUBDOMAIN" > "$DEMO_DIR/.cf-subdomain"
+fi
+if [[ -n "$ALEX_URL" ]]; then
+  echo "$ALEX_URL" > "$DEMO_DIR/.alex-cf-url"
+fi
+
+echo ""
+echo "========================================================================"
+echo "✅ Demo 2 Cloudflare Workers Deployed (Powered by @a2a-js/sdk)!"
+echo "   Sarah's Agent:  ${VP_URL:-https://vp-schedule-bot.<your-subdomain>.workers.dev}"
+echo "   Alex's Agent:   ${ALEX_URL:-https://alex-schedule-bot.<your-subdomain>.workers.dev}"
+echo "========================================================================"

@@ -1,26 +1,24 @@
 {
-  "name": "Alex Schedule-Bot (Director of Platform)",
-  "description": "Personal calendar scheduling agent for Director Alex. Handles internal meeting rescheduling requests from peer A2A agents.",
+  "name": "Alex Schedule-Bot (Alex Rivera)",
+  "description": "Personal Calendar Agent for Staff Tech Lead Alex Rivera. Checks real-time availability, moves flexible focus blocks for priority launches, and confirms meeting invites.",
   "version": "1.0.0",
-  "capabilities": { "streaming": true },
+  "capabilities": { "streaming": true, "pushNotifications": true },
   "defaultInputModes": ["text"],
   "defaultOutputModes": ["text"],
   "supportedInterfaces": [
     {
-      "url": "http://localhost:8084",
+      "url": "https://alex-schedule-bot.booth-demos.workers.dev",
       "protocolBinding": "HTTP+JSON",
       "protocolVersion": "1.0"
     }
   ],
   "skills": [
     {
-      "id": "reschedule-internal-sync",
-      "name": "Internal Sync Rescheduler",
-      "description": "Checks Director Alex's calendar and moves movable internal 1:1 meetings to open slots.",
-      "tags": ["calendar", "reschedule", "a2a"],
-      "examples": [
-        "Can we move our Thursday 15:30-16:00 Weekly Sync to Friday 11:00-11:30?"
-      ]
+      "id": "schedule-negotiation",
+      "name": "Calendar Availability & Hold Resolution",
+      "description": "Verifies Alex Rivera's true calendar availability, moves flexible blocks when needed, and confirms meeting slots.",
+      "tags": ["calendar", "scheduling"],
+      "examples": ["Can Alex join a 30-min Project Horizon sync tomorrow at 2:00 PM?"]
     }
   ]
 }

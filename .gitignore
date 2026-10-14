@@ -66,3 +66,7 @@ aiwt-*
 docs/demo/a2a-demo.cast
 .deployed-urls.env
 examples/06-booth-demos/bin/a2a
+
+node_modules/
+package-lock.json
+examples/06-booth-demos/.cf-subdomain

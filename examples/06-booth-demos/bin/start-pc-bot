@@ -4,7 +4,7 @@ DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_ROOT="$(cd "$DEMO_DIR/../.." && pwd)"
 export PATH="$DEMO_DIR/bin:$PATH"
 
-echo "🔨 Building a2a CLI (with PushNotifications enabled)..."
+echo "🔨 Building a2a CLI..."
 go -C "$REPO_ROOT" build -o "$DEMO_DIR/bin/a2a" .
 
 cat > "$DEMO_DIR/pc-bot/mcp.json" << EOF
@@ -17,6 +17,70 @@ cat > "$DEMO_DIR/pc-bot/mcp.json" << EOF
   }
 }
 EOF
+
+cleanup() {
+  kill $(jobs -p) 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+# 1. Start local gateway on 18081 routing `/webhook` -> 19081 and `/*` -> 8081
+lsof -ti tcp:18081 | xargs kill -9 2>/dev/null || true
+python3 - << 'PYEOF' &
+import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+class Proxy(BaseHTTPRequestHandler):
+    def _proxy(self):
+        target_port = 19081 if self.path.startswith("/webhook") else 8081
+        url = f"http://127.0.0.1:{target_port}{self.path}"
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length) if length > 0 else None
+        headers = {k: v for k, v in self.headers.items() if k.lower() != "host"}
+        req = urllib.request.Request(url, data=body, headers=headers, method=self.command)
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = resp.read()
+                self.send_response(resp.status)
+                for k, v in resp.getheaders():
+                    if k.lower() not in ("transfer-encoding", "content-length", "connection"):
+                        self.send_header(k, v)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+        except Exception as e:
+            self.send_response(502)
+            self.end_headers()
+            self.wfile.write(str(e).encode())
+    def do_GET(self): self._proxy()
+    def do_POST(self): self._proxy()
+    def do_DELETE(self): self._proxy()
+    def log_message(self, *args): pass
+
+HTTPServer(("127.0.0.1", 18081), Proxy).serve_forever()
+PYEOF
+
+# 2. Start cloudflared quick-tunnel to 18081 and register with RigFoundry Cloudflare Worker
+SUBDOMAIN="booth-demos"
+if [[ -f "$DEMO_DIR/.cf-subdomain" ]]; then
+  SUBDOMAIN="$(cat "$DEMO_DIR/.cf-subdomain" | tr -d '[:space:]')"
+fi
+WORKER_URL="https://rigfoundry.${SUBDOMAIN}.workers.dev"
+
+TUNNEL_LOG="$(mktemp)"
+npx --yes cloudflared tunnel --url http://127.0.0.1:18081 >"$TUNNEL_LOG" 2>&1 &
+(
+  for _ in $(seq 1 30); do
+    TURL="$(grep -Eo 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" | head -n 1 || true)"
+    if [[ -n "$TURL" ]]; then
+      curl -sS -X POST "${WORKER_URL}/_admin/register-upstream" \
+        -H "Content-Type: application/json" \
+        -d "{\"upstreamUrl\":\"${TURL}\"}" >/dev/null 2>&1 || true
+      printf "\033[1;32m🌐 Connected Cloudflare Worker (%s) -> Local a2a server via %s\033[0m\n" "$WORKER_URL" "$TURL"
+      break
+    fi
+    sleep 1
+  done
+) &
 
 exec "$DEMO_DIR/bin/a2a" server --host 127.0.0.1 --port 8081 \
   --card "$DEMO_DIR/pc-bot/card.json" \

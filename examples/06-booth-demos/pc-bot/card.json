@@ -7,7 +7,7 @@
   "defaultOutputModes": ["text"],
   "supportedInterfaces": [
     {
-      "url": "http://localhost:8081",
+      "url": "https://rigfoundry.booth-demos.workers.dev",
       "protocolBinding": "HTTP+JSON",
       "protocolVersion": "1.0"
     }

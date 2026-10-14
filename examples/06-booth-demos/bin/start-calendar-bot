@@ -1,21 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "$DEMO_DIR/../.." && pwd)"
 export PATH="$DEMO_DIR/bin:$PATH"
-ENV_FILE="$DEMO_DIR/calendar-worker/.deployed-urls.env"
-if [[ -f "$ENV_FILE" ]]; then
-  source "$ENV_FILE"
-  export ALEX_AGENT_URL="${ALEX_AGENT_URL:-http://localhost:8084}"
-fi
 
-rm -f /tmp/vp-a2a-booked /tmp/ea-email-round /tmp/ea-email-booked /tmp/gcal-synced-8842
+echo "🔨 Building a2a CLI..."
+go -C "$REPO_ROOT" build -o "$DEMO_DIR/bin/a2a" .
 
 cat > "$DEMO_DIR/calendar-bot/mcp.json" << EOF
 {
   "mcpServers": {
-    "vp_calendar": {
+    "sarah_calendar": {
       "command": "python3",
-      "args": ["$DEMO_DIR/calendar-bot/vp_calendar_mcp.py"]
+      "args": ["$DEMO_DIR/calendar-bot/calendar_mcp.py"]
     }
   }
 }
@@ -32,10 +29,88 @@ cat > "$DEMO_DIR/alex-bot/mcp.json" << EOF
 }
 EOF
 
-echo "🚀 Starting Alex Schedule-Bot (Multi-Hop Target) on http://localhost:8084..."
-a2a server --port 8084 --card "$DEMO_DIR/alex-bot/card.json" --exec "$DEMO_DIR/alex-bot/run_agent.sh" &
-ALEX_PID=$!
-trap 'kill $ALEX_PID 2>/dev/null || true' EXIT
+cleanup() {
+  kill $(jobs -p) 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
 
-echo "🚀 Starting VP Schedule-Bot on http://localhost:8082..."
-a2a server --port 8082 --card "$DEMO_DIR/calendar-bot/card.json" --exec "$DEMO_DIR/calendar-bot/run_agent.sh"
+# 1. Start Alex Schedule-Bot on port 8084 in background
+lsof -ti tcp:8084 | xargs kill -9 2>/dev/null || true
+"$DEMO_DIR/bin/a2a" server --host 127.0.0.1 --port 8084 \
+  --card "$DEMO_DIR/alex-bot/card.json" \
+  --exec "$DEMO_DIR/alex-bot/run_agent.sh" &
+
+# 2. Start local gateway on 18082 routing `/alex/*` -> 8084 and `/vp/*` -> 8082
+lsof -ti tcp:18082 | xargs kill -9 2>/dev/null || true
+python3 - << 'PYEOF' &
+import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+class Proxy(BaseHTTPRequestHandler):
+    def _proxy(self):
+        if self.path.startswith("/alex"):
+            target_port = 8084
+            subpath = self.path[5:] or "/"
+        elif self.path.startswith("/vp"):
+            target_port = 8082
+            subpath = self.path[3:] or "/"
+        else:
+            target_port = 8082
+            subpath = self.path
+        url = f"http://127.0.0.1:{target_port}{subpath}"
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length) if length > 0 else None
+        headers = {k: v for k, v in self.headers.items() if k.lower() != "host"}
+        req = urllib.request.Request(url, data=body, headers=headers, method=self.command)
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = resp.read()
+                self.send_response(resp.status)
+                for k, v in resp.getheaders():
+                    if k.lower() not in ("transfer-encoding", "content-length", "connection"):
+                        self.send_header(k, v)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+        except Exception as e:
+            self.send_response(502)
+            self.end_headers()
+            self.wfile.write(str(e).encode())
+    def do_GET(self): self._proxy()
+    def do_POST(self): self._proxy()
+    def do_DELETE(self): self._proxy()
+    def log_message(self, *args): pass
+
+HTTPServer(("127.0.0.1", 18082), Proxy).serve_forever()
+PYEOF
+
+# 3. Start cloudflared quick-tunnel to 18082 and register with VP & Alex Cloudflare Workers
+SUBDOMAIN="booth-demos"
+if [[ -f "$DEMO_DIR/.cf-subdomain" ]]; then
+  SUBDOMAIN="$(cat "$DEMO_DIR/.cf-subdomain" | tr -d '[:space:]')"
+fi
+VP_WORKER_URL="https://vp-schedule-bot.${SUBDOMAIN}.workers.dev"
+ALEX_WORKER_URL="https://alex-schedule-bot.${SUBDOMAIN}.workers.dev"
+
+TUNNEL_LOG="$(mktemp)"
+npx --yes cloudflared tunnel --url http://127.0.0.1:18082 >"$TUNNEL_LOG" 2>&1 &
+(
+  for _ in $(seq 1 30); do
+    TURL="$(grep -Eo 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" | head -n 1 || true)"
+    if [[ -n "$TURL" ]]; then
+      curl -sS -X POST "${VP_WORKER_URL}/_admin/register-upstream" \
+        -H "Content-Type: application/json" \
+        -d "{\"upstreamUrl\":\"${TURL}/vp\"}" >/dev/null 2>&1 || true
+      curl -sS -X POST "${ALEX_WORKER_URL}/_admin/register-upstream" \
+        -H "Content-Type: application/json" \
+        -d "{\"upstreamUrl\":\"${TURL}/alex\"}" >/dev/null 2>&1 || true
+      printf "\033[1;32m🌐 Connected Cloudflare Workers (%s & %s) -> Local a2a servers via %s\033[0m\n" "$VP_WORKER_URL" "$ALEX_WORKER_URL" "$TURL"
+      break
+    fi
+    sleep 1
+  done
+) &
+
+exec "$DEMO_DIR/bin/a2a" server --host 127.0.0.1 --port 8082 \
+  --card "$DEMO_DIR/calendar-bot/card.json" \
+  --exec "$DEMO_DIR/calendar-bot/run_agent.sh"

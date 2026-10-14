@@ -1,0 +1,9 @@
+{
+  "name": "a2a-booth-demo-pc-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@a2a-js/sdk": "^1.3.0"
+  }
+}

@@ -1,24 +1,24 @@
 {
-  "name": "VP Schedule-Bot",
-  "description": "Executive scheduling agent for Yaroslav (VP of Engineering). Proposes candidate 30-minute slots from free/busy availability and books confirmed meetings.",
+  "name": "VP Schedule-Bot (Sarah Chen)",
+  "description": "Executive Calendar Agent for VP Sarah Chen. Negotiates meeting times, resolves soft holds, and books high-priority 3-way syncs.",
   "version": "1.0.0",
-  "capabilities": { "streaming": true },
+  "capabilities": { "streaming": true, "pushNotifications": true },
   "defaultInputModes": ["text"],
   "defaultOutputModes": ["text"],
   "supportedInterfaces": [
     {
-      "url": "http://localhost:8082",
+      "url": "https://vp-schedule-bot.booth-demos.workers.dev",
       "protocolBinding": "HTTP+JSON",
       "protocolVersion": "1.0"
     }
   ],
   "skills": [
     {
-      "id": "schedule-vp-meeting",
-      "name": "Schedule Meeting with VP",
-      "description": "Proposes 3 candidate slots at a time and books a 1:1 meeting on the VP's calendar.",
+      "id": "executive-scheduling",
+      "name": "Executive Calendar Negotiation & Booking",
+      "description": "Checks Sarah Chen's true calendar availability, moves flexible holds for urgent project syncs, and books meetings.",
       "tags": ["calendar", "scheduling", "executive"],
-      "examples": ["Propose 3 options for a 30-minute meeting with the VP this week"]
+      "examples": ["Find a 30-minute slot tomorrow with Sarah Chen and Alex Rivera for Project Horizon"]
     }
   ]
 }

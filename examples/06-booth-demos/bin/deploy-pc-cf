@@ -3,32 +3,26 @@ set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WORKER_DIR="$DEMO_DIR/pc-worker"
 
-echo "🚀 Deploying Demo 1 PC Websites (MockEgg + RigFoundry Card) to Cloudflare Workers..."
-cd "$WORKER_DIR"
+echo "📦 Installing @a2a-js/sdk in pc-worker..."
+npm --prefix "$WORKER_DIR" install --no-audit --no-fund
 
-deploy_worker() {
-  local name="$1"
-  echo "──► Deploying $name..." >&2
-  local out
-  out="$(npx --yes wrangler deploy --name "$name" 2>&1)"
-  echo "$out" >&2
-  local url
-  url="$(echo "$out" | grep -Eo 'https://[a-zA-Z0-9._-]+\.workers\.dev' | tail -n 1)"
-  echo "$url"
-}
-
-MOCKEGG_URL="$(deploy_worker "mockegg")"
-RIGFOUNDRY_URL="$(deploy_worker "rigfoundry")"
-
-cat > "$WORKER_DIR/.deployed-urls.env" << EOF
-MOCKEGG_URL="${MOCKEGG_URL}"
-RIGFOUNDRY_URL="${RIGFOUNDRY_URL}"
-EOF
+echo "🚀 Deploying mockegg (Public Multi-Page HTML Store — NO A2A Card)..."
+OUT1=$(npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name mockegg 2>&1 | tee /dev/stderr)
+MOCKEGG_URL=$(echo "$OUT1" | grep -Eo 'https://mockegg\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 || true)
 
 echo ""
-echo "✅ Demo 1 Cloudflare Workers deployed:"
-echo "   • MockEgg Store Website:       ${MOCKEGG_URL}"
-echo "   • RigFoundry A2A Card Origin:  ${RIGFOUNDRY_URL} (-> http://localhost:8081)"
+echo "🚀 Deploying rigfoundry (Full @a2a-js/sdk A2A Server & Client Worker)..."
+OUT2=$(npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name rigfoundry 2>&1 | tee /dev/stderr)
+RIGFOUNDRY_URL=$(echo "$OUT2" | grep -Eo 'https://rigfoundry\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 || true)
+
+SUBDOMAIN=$(echo "$RIGFOUNDRY_URL" | sed -E 's#https://rigfoundry\.([^.]+)\.workers\.dev#\1#' || true)
+if [[ -n "$SUBDOMAIN" && "$SUBDOMAIN" != "$RIGFOUNDRY_URL" ]]; then
+  echo "$SUBDOMAIN" > "$DEMO_DIR/.cf-subdomain"
+fi
+
 echo ""
-echo "📋 Prompt to paste into Window 1 & Window 2 for Demo 1:"
-echo "   I want to build a new custom PC for video games from ${MOCKEGG_URL}, make it unique and distinctive, but perform well. Give the best I can get for \$1000. You know me and my preferences."
+echo "========================================================================"
+echo "✅ Demo 1 Cloudflare Workers Deployed (Powered by @a2a-js/sdk)!"
+echo "   Store URL:      ${MOCKEGG_URL:-https://mockegg.<your-subdomain>.workers.dev}"
+echo "   A2A Agent URL:  ${RIGFOUNDRY_URL:-https://rigfoundry.<your-subdomain>.workers.dev}"
+echo "========================================================================"
