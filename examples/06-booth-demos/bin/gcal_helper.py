@@ -140,35 +140,33 @@ def get_access_token_and_project():
 
 
 def gcal_request(method: str, path: str, body=None, query=None):
-  token, quota_project = get_access_token_and_project()
+  token, _ = get_access_token_and_project()
   url = f"https://www.googleapis.com/calendar/v3{path}"
   if query:
     url += "?" + urllib.parse.urlencode(query)
   data = json.dumps(body).encode() if body is not None else None
+  headers = {
+      "Authorization": f"Bearer {token}",
+      "Content-Type": "application/json",
+  }
 
-  def _do(use_project: bool):
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
-    if use_project and quota_project:
-      headers["X-Goog-User-Project"] = quota_project
+  for attempt in range(6):
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=15) as resp:
-      raw = resp.read().decode()
-      return json.loads(raw) if raw else {}
-
-  try:
-    return _do(False)
-  except urllib.error.HTTPError as e:
-    err_body = e.read().decode(errors="ignore")
-    if quota_project:
-      try:
-        return _do(True)
-      except urllib.error.HTTPError as e2:
-        err_body = e2.read().decode(errors="ignore")
-        raise RuntimeError(f"Google Calendar API {method} {path} failed ({e2.code}): {err_body}") from e2
-    raise RuntimeError(f"Google Calendar API {method} {path} failed ({e.code}): {err_body}") from e
+    try:
+      with urllib.request.urlopen(req, timeout=15) as resp:
+        raw = resp.read().decode()
+        return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as e:
+      err_body = e.read().decode(errors="ignore")
+      if e.code in (403, 429, 500, 503) and (
+          "rateLimitExceeded" in err_body
+          or "userRateLimitExceeded" in err_body
+          or "quotaExceeded" in err_body
+          or e.code in (429, 500, 503)
+      ) and attempt < 5:
+        time.sleep(0.6 * (attempt + 1))
+        continue
+      raise RuntimeError(f"Google Calendar API {method} {path} failed ({e.code}): {err_body}") from e
 
 
 def next_week_monday() -> datetime.date:
@@ -236,7 +234,7 @@ def clear_week_events(cal_id: str):
         )
       except Exception:
         pass
-  with ThreadPoolExecutor(max_workers=8) as pool:
+  with ThreadPoolExecutor(max_workers=2) as pool:
     list(pool.map(_del, events))
 
 
@@ -306,46 +304,32 @@ def reset_and_seed(quota_project: str = "", sa_email: str = "", user_email: str 
   # Full realistic Monday-Friday 09:00-17:00 schedules across all 3 calendars
   my_specs = [
       # Monday: open 16:00-16:30
-      (cal_ids["my"], "Sprint Planning & Backlog Grooming", 0, "09:00", "12:00", ""),
-      (cal_ids["my"], "Team Lunch", 0, "12:00", "13:00", ""),
-      (cal_ids["my"], "Distributed Systems Design Review", 0, "13:00", "16:00", ""),
+      (cal_ids["my"], "Sprint Planning & Design Deep Dive", 0, "09:00", "16:00", ""),
       (cal_ids["my"], "PR & Code Review Triage", 0, "16:30", "17:00", ""),
       # Tuesday: fully booked 09:00-17:00
-      (cal_ids["my"], "Architecture Offsite", 1, "09:00", "12:30", ""),
-      (cal_ids["my"], "Lunch & Learn", 1, "12:30", "13:30", ""),
-      (cal_ids["my"], "Production Incident Game Day", 1, "13:30", "17:00", ""),
+      (cal_ids["my"], "Architecture Offsite & Incident Game Day", 1, "09:00", "17:00", ""),
       # Wednesday: open 10:30-11:00
       (cal_ids["my"], "Platform Guild Sync", 2, "09:00", "10:30", ""),
-      (cal_ids["my"], "Security & Threat Modeling Review", 2, "11:00", "13:00", ""),
-      (cal_ids["my"], "Customer Escalation Working Session", 2, "13:00", "17:00", ""),
+      (cal_ids["my"], "Security Review & Customer Escalation Session", 2, "11:00", "17:00", ""),
       # Thursday: open 15:30-16:00
-      (cal_ids["my"], "Quarterly Roadmap Planning", 3, "09:00", "12:30", ""),
-      (cal_ids["my"], "Team Lunch", 3, "12:30", "13:30", ""),
-      (cal_ids["my"], "Latency & Load Benchmarking", 3, "13:30", "15:30", ""),
+      (cal_ids["my"], "Quarterly Roadmap & Load Benchmarking", 3, "09:00", "15:30", ""),
       (cal_ids["my"], "Mentorship & Peer 1:1s", 3, "16:00", "17:00", ""),
       # Friday: fully booked 09:00-17:00
-      (cal_ids["my"], "Dentist Appointment", 4, "09:00", "10:30", ""),
-      (cal_ids["my"], "Release Readiness Review", 4, "10:30", "13:00", ""),
-      (cal_ids["my"], "Engineering All-Hands & Demo Day", 4, "13:00", "17:00", ""),
+      (cal_ids["my"], "Release Readiness Review & Eng All-Hands", 4, "09:00", "17:00", ""),
   ]
 
   vp_specs = [
       # Monday: fully booked 09:00-17:00
-      (cal_ids["vp"], "Executive Staff Sync", 0, "09:00", "12:30", ""),
-      (cal_ids["vp"], "Executive Working Lunch", 0, "12:30", "13:30", ""),
-      (cal_ids["vp"], "Board Deck Prep with External Advisors", 0, "13:30", "17:00", ""),
+      (cal_ids["vp"], "Executive Staff Sync & Board Deck Prep", 0, "09:00", "17:00", ""),
       # Tuesday: open 10:00-10:30
       (cal_ids["vp"], "VP & Directors Weekly Sync", 1, "09:00", "10:00", ""),
-      (cal_ids["vp"], "Cloud FinOps & Budget Review", 1, "10:30", "12:30", ""),
-      (cal_ids["vp"], "Leadership Lunch", 1, "12:30", "13:30", ""),
-      (cal_ids["vp"], "Keynote Rehearsal & Partner Call", 1, "13:30", "17:00", ""),
+      (cal_ids["vp"], "Cloud FinOps Review & Keynote Rehearsal", 1, "10:30", "17:00", ""),
       # Wednesday: open 14:00-14:30
-      (cal_ids["vp"], "Enterprise Customer Executive Briefing", 2, "09:00", "12:30", ""),
-      (cal_ids["vp"], "Principal Hiring Debrief & Lunch", 2, "12:30", "14:00", ""),
+      (cal_ids["vp"], "Enterprise Customer Executive Briefing", 2, "09:00", "14:00", ""),
       (cal_ids["vp"], "Product & GTM Strategy Review", 2, "14:30", "17:00", ""),
       # Thursday: open 11:00-11:30; movable internal 1:1 at 15:30-16:00
       (cal_ids["vp"], "Quarterly Business Review (QBR)", 3, "09:00", "11:00", ""),
-      (cal_ids["vp"], "Executive Offsite & Lunch", 3, "11:30", "15:30", ""),
+      (cal_ids["vp"], "Executive Offsite & Working Lunch", 3, "11:30", "15:30", ""),
       (cal_ids["vp"], "Weekly Sync: Yaroslav (VP) & Alex (Director of Platform)", 3, "15:30", "16:00", movable_desc),
       (cal_ids["vp"], "Investor Relations Call", 3, "16:00", "17:00", ""),
       # Friday: open 11:00-11:30
@@ -355,8 +339,7 @@ def reset_and_seed(quota_project: str = "", sa_email: str = "", user_email: str 
 
   alex_specs = [
       # Monday: fully booked 09:00-17:00
-      (cal_ids["alex"], "Platform Roadmap & OKR Review", 0, "09:00", "12:30", ""),
-      (cal_ids["alex"], "Core Infrastructure Architecture Sync", 0, "12:30", "17:00", ""),
+      (cal_ids["alex"], "Platform Roadmap & Core Infra Review", 0, "09:00", "17:00", ""),
       # Tuesday: open 15:00-15:30
       (cal_ids["alex"], "SRE & Reliability Engineering Summit", 1, "09:00", "15:00", ""),
       (cal_ids["alex"], "Cloud Vendor Contract Negotiation", 1, "15:30", "17:00", ""),
@@ -373,7 +356,7 @@ def reset_and_seed(quota_project: str = "", sa_email: str = "", user_email: str 
 
   print("🌱 Seeding full 09:00–17:00 Mon–Fri schedules on all 3 Google Calendars...")
   all_specs = my_specs + vp_specs + alex_specs
-  with ThreadPoolExecutor(max_workers=8) as pool:
+  with ThreadPoolExecutor(max_workers=2) as pool:
     list(pool.map(lambda s: create_event(*s), all_specs))
 
   next_mon = next_week_monday()
