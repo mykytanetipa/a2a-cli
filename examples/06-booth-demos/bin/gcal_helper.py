@@ -337,8 +337,8 @@ def format_slot_label(ev: dict) -> tuple[str, str]:
   end_raw = ev.get("end", {}).get("dateTime", "")
   if not start_raw or not end_raw:
     return ("Unknown", ev.get("summary", "Busy"))
-  dt_start = datetime.datetime.fromisoformat(start_raw)
-  dt_end = datetime.datetime.fromisoformat(end_raw)
+  dt_start = datetime.datetime.fromisoformat(start_raw).astimezone()
+  dt_end = datetime.datetime.fromisoformat(end_raw).astimezone()
   day_name = dt_start.strftime("%A")
   slot_str = f"{day_name} {dt_start.strftime('%H:%M')}-{dt_end.strftime('%H:%M')}"
   return slot_str, ev.get("summary", "Busy")
@@ -373,7 +373,7 @@ def print_my_calendar():
       else:
         print(f"- {s}:  ❌ BUSY ({summary})")
     else:
-      print(f"- {s}:  ✅ FREE (Open 30-min slot on Google Calendar)")
+      print(f"- {s}:  ✅ FREE (Only open 30-min slot on Google Calendar)")
 
 
 def move_alex_and_vp_sync(to_day_offset: int = 4, to_start: str = "11:00", to_end: str = "11:30"):
@@ -396,6 +396,23 @@ def move_alex_and_vp_sync(to_day_offset: int = 4, to_start: str = "11:00", to_en
         f"/calendars/{urllib.parse.quote(cals['vp'], safe='')}/events/{urllib.parse.quote(state['vp_sync_event_id'], safe='')}",
         body=body,
     )
+
+
+def parse_slot_arg(slot_text: str) -> tuple[int, str, str]:
+  lower = (slot_text or "").lower()
+  day_map = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4}
+  day_offset = 3
+  for dname, idx in day_map.items():
+    if dname in lower:
+      day_offset = idx
+      break
+  import re
+  m = re.search(r"(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})", slot_text or "")
+  if m:
+    s_hm = m.group(1).zfill(5)
+    e_hm = m.group(2).zfill(5)
+    return day_offset, s_hm, e_hm
+  return day_offset, "15:30", "16:00"
 
 
 def book_1on1_on_gcal(summary: str, invite_id: str, day_offset: int = 3, start_hm: str = "15:30", end_hm: str = "16:00", include_vp: bool = True):
