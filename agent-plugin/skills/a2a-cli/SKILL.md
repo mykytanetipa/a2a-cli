@@ -115,15 +115,15 @@ transport) or `-e <url> --transport <rest|jsonrpc|grpc>` (connect directly).
 
 8. **Submit long-running tasks asynchronously (`--async`) with push notifications:**
    When an agent indicates that the next step is a **long-running task** (e.g., background compatibility verification, build/order processing, or batch jobs), do **not** block waiting for it:
-   1. Send the request with `--async` so it returns immediately with the `<task-id>`:
+   1. First, run `a2a send` with `--async` by itself and wait for its output so you have the real `<task-id>` (never run step 2 in parallel before you have `<task-id>`):
       ```bash
       a2a send -a https://agent.example.com --context-id <context-id> --async "<message>"
       ```
-   2. Register a push-notification callback for that `<task-id>`:
+   2. Next, once you have the `<task-id>` from step 1, register a push-notification callback for that `<task-id>`:
       ```bash
       a2a task push-config create -a https://agent.example.com <task-id> --url http://127.0.0.1:19081/webhook
       ```
-   3. Report the `<task-id>` to the user and **end your turn immediately without polling** (do not run `a2a task get` in a loop), so the user can check the status later with `a2a task get`.
+   3. Report the `<task-id>` to the user and **end your turn immediately without polling** (do not run `a2a task get`), so the user can check the status later once notified.
 
 ## Key flags
 
