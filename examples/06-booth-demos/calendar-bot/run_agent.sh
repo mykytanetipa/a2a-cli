@@ -24,13 +24,13 @@ log_live "\033[1;35m📥 [VP Schedule-Bot] INBOUND A2A MESSAGE (Context: ${SESSI
 log_live "\033[0;37m${msg}\033[0m"
 log_live "\033[1;33m⚙️  Running Claude Code (VP Schedule-Bot + Calendar MCP)...\033[0m"
 
-if resp="$(claude -p --dangerously-skip-permissions \
+if resp="$(claude -p --dangerously-skip-permissions --strict-mcp-config \
   --mcp-config "$BOT_DIR/mcp.json" \
   --append-system-prompt-file "$BOT_DIR/INSTRUCTIONS.md" \
   --resume "$SESSION_ID" "$msg" 2>/dev/null)"; then
   :
 else
-  resp="$(claude -p --dangerously-skip-permissions \
+  resp="$(claude -p --dangerously-skip-permissions --strict-mcp-config \
     --mcp-config "$BOT_DIR/mcp.json" \
     --append-system-prompt-file "$BOT_DIR/INSTRUCTIONS.md" \
     --session-id "$SESSION_ID" "$msg")"
