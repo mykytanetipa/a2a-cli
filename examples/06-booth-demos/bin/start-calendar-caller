@@ -4,6 +4,7 @@ DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PLUGIN_DIR="$(cd "$DEMO_DIR/../../agent-plugin" && pwd)"
 export PATH="$DEMO_DIR/bin:$PATH"
 export DEMO_NO_A2A=0
+rm -f /tmp/vp-a2a-booked
 rm -rf ~/.cache/a2a-cli/discover
 rm -rf ~/.claude/projects/*calendar-caller*/memory 2>/dev/null || true
 

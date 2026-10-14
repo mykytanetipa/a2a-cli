@@ -7,12 +7,37 @@ export PATH="$DEMO_DIR/bin:$PATH"
 echo "🔨 Building a2a CLI..."
 go -C "$REPO_ROOT" build -o "$DEMO_DIR/bin/a2a" .
 
+SUBDOMAIN="booth-demos"
+if [[ -f "$DEMO_DIR/.cf-subdomain" ]]; then
+  SUBDOMAIN="$(cat "$DEMO_DIR/.cf-subdomain" | tr -d '[:space:]')"
+fi
+VP_WORKER_URL="https://vp-schedule-bot.${SUBDOMAIN}.workers.dev"
+ALEX_WORKER_URL="https://alex-schedule-bot.${SUBDOMAIN}.workers.dev"
+SARAH_WORKER_URL="https://vp-sarah.${SUBDOMAIN}.workers.dev"
+
+if [[ -f "$DEMO_DIR/calendar-worker/.deployed-urls.env" ]]; then
+  source "$DEMO_DIR/calendar-worker/.deployed-urls.env"
+  VP_WORKER_URL="${VP_AGENT_URL:-$VP_WORKER_URL}"
+  ALEX_WORKER_URL="${ALEX_AGENT_URL:-$ALEX_WORKER_URL}"
+else
+  cat > "$DEMO_DIR/calendar-worker/.deployed-urls.env" << EOF
+VP_AGENT_URL="${VP_WORKER_URL}"
+ALEX_AGENT_URL="${ALEX_WORKER_URL}"
+SARAH_PROFILE_URL="${SARAH_WORKER_URL}"
+EOF
+fi
+
+export ALEX_AGENT_URL="$ALEX_WORKER_URL"
+
 cat > "$DEMO_DIR/calendar-bot/mcp.json" << EOF
 {
   "mcpServers": {
-    "sarah_calendar": {
+    "vp_calendar": {
       "command": "python3",
-      "args": ["$DEMO_DIR/calendar-bot/calendar_mcp.py"]
+      "args": ["$DEMO_DIR/calendar-bot/vp_calendar_mcp.py"],
+      "env": {
+        "ALEX_AGENT_URL": "$ALEX_WORKER_URL"
+      }
     }
   }
 }
@@ -85,13 +110,6 @@ HTTPServer(("127.0.0.1", 18082), Proxy).serve_forever()
 PYEOF
 
 # 3. Start cloudflared quick-tunnel to 18082 and register with VP & Alex Cloudflare Workers
-SUBDOMAIN="booth-demos"
-if [[ -f "$DEMO_DIR/.cf-subdomain" ]]; then
-  SUBDOMAIN="$(cat "$DEMO_DIR/.cf-subdomain" | tr -d '[:space:]')"
-fi
-VP_WORKER_URL="https://vp-schedule-bot.${SUBDOMAIN}.workers.dev"
-ALEX_WORKER_URL="https://alex-schedule-bot.${SUBDOMAIN}.workers.dev"
-
 TUNNEL_LOG="$(mktemp)"
 npx --yes cloudflared tunnel --url http://127.0.0.1:18082 >"$TUNNEL_LOG" 2>&1 &
 (

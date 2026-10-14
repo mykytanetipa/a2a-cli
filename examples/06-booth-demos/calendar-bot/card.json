@@ -1,6 +1,6 @@
 {
-  "name": "VP Schedule-Bot (Sarah Chen)",
-  "description": "Executive Calendar Agent for VP Sarah Chen. Negotiates meeting times, resolves soft holds, and books high-priority 3-way syncs.",
+  "name": "VP Schedule-Bot",
+  "description": "Executive scheduling agent for VP Yaroslav. Proposes 1:1 slots, negotiates movable internal conflicts via multi-hop A2A with other attendees' agents, and sends calendar invites.",
   "version": "1.0.0",
   "capabilities": { "streaming": true, "pushNotifications": true },
   "defaultInputModes": ["text"],
@@ -14,11 +14,11 @@
   ],
   "skills": [
     {
-      "id": "executive-scheduling",
-      "name": "Executive Calendar Negotiation & Booking",
-      "description": "Checks Sarah Chen's true calendar availability, moves flexible holds for urgent project syncs, and books meetings.",
-      "tags": ["calendar", "scheduling", "executive"],
-      "examples": ["Find a 30-minute slot tomorrow with Sarah Chen and Alex Rivera for Project Horizon"]
+      "id": "schedule-1on1",
+      "name": "VP 1:1 Slot Negotiation & Multi-Hop Conflict Resolution",
+      "description": "Checks VP Yaroslav's calendar availability, coordinates with other executives' A2A agents to move internal conflicts, and books confirmed 1:1 meetings.",
+      "tags": ["calendar", "scheduling", "1on1"],
+      "examples": ["Schedule a 30-minute 1:1 with my VP this week"]
     }
   ]
 }
