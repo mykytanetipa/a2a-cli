@@ -9,4 +9,8 @@ rm -rf ~/.cache/a2a-cli/discover
 rm -rf ~/.claude/projects/*calendar-caller*/memory 2>/dev/null || true
 
 cd "$DEMO_DIR/calendar-caller"
-exec claude --strict-mcp-config --settings '{"enabledPlugins":{"a2a-cli@a2a":false}}' --plugin-dir "$PLUGIN_DIR" --append-system-prompt-file CLAUDE.md "$@"
+exec claude --strict-mcp-config \
+  --disallowedTools "mcp__claude_ai_Google_Calendar__*,mcp__claude_ai_Gmail__*" \
+  --settings '{"enabledPlugins":{"a2a-cli@a2a":false}}' \
+  --plugin-dir "$PLUGIN_DIR" \
+  --append-system-prompt-file CLAUDE.md "$@"
