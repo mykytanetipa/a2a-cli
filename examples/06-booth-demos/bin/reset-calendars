@@ -1,23 +1,34 @@
 #!/usr/bin/env bash
-# Sets up a Service Account in your active GCP project, enables Google Calendar API,
+# Sets up a Service Account in your GCP project, enables Google Calendar API,
 # creates the 3 Demo Google Calendars ("Demo: My Calendar", "Demo: VP Yaroslav",
 # "Demo: Director Alex"), shares them with your Google account, and seeds this week's schedule.
 set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SA_KEY_FILE="$HOME/.config/a2a-cal-sa.json"
 rm -f /tmp/ea-email-round /tmp/ea-email-booked /tmp/vp-a2a-booked /tmp/a2a-gcal-token.json
 
-PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
 USER_EMAIL="$(gcloud config get-value account 2>/dev/null || true)"
+if [[ -z "$USER_EMAIL" || "$USER_EMAIL" == "(unset)" ]]; then
+  echo "🔐 Logging in to gcloud (standard cloud-platform login)..."
+  gcloud auth login
+  USER_EMAIL="$(gcloud config get-value account 2>/dev/null || true)"
+fi
 
+PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
 if [[ -z "$PROJECT_ID" || "$PROJECT_ID" == "(unset)" ]]; then
-  echo "❌ No active gcloud project set. Run: gcloud config set project <YOUR_GCP_PROJECT_ID>"
-  exit 1
+  PROJECT_ID="$(gcloud projects list --format='value(projectId)' --limit=1 2>/dev/null || true)"
+  if [[ -n "$PROJECT_ID" ]]; then
+    gcloud config set project "$PROJECT_ID"
+  else
+    echo "❌ No GCP project found. Run: gcloud config set project <YOUR_GCP_PROJECT_ID>"
+    exit 1
+  fi
 fi
 
 SA_NAME="a2a-cal-demo"
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
-if [[ ! -f "$DEMO_DIR/.gcal-state.json" ]]; then
+if [[ ! -f "$SA_KEY_FILE" ]]; then
   echo "🔧 Enabling Google Calendar API & IAM Credentials API on project '$PROJECT_ID'..."
   gcloud services enable calendar-json.googleapis.com iamcredentials.googleapis.com --project="$PROJECT_ID"
 
@@ -26,15 +37,19 @@ if [[ ! -f "$DEMO_DIR/.gcal-state.json" ]]; then
     gcloud iam service-accounts create "$SA_NAME" \
       --display-name="A2A Booth Demo Calendar Agent" \
       --project="$PROJECT_ID"
-    sleep 3
+    sleep 2
   fi
 
-  echo "🔑 Granting Token Creator permission to '$USER_EMAIL' on '$SA_EMAIL'..."
-  gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
-    --member="user:${USER_EMAIL}" \
-    --role="roles/iam.serviceAccountTokenCreator" \
-    --project="$PROJECT_ID" >/dev/null
-  sleep 2
+  mkdir -p "$HOME/.config"
+  echo "🔑 Creating Service Account key at $SA_KEY_FILE..."
+  if ! gcloud iam service-accounts keys create "$SA_KEY_FILE" --iam-account="$SA_EMAIL" --project="$PROJECT_ID" 2>/dev/null; then
+    echo "ℹ️  Key creation restricted by org policy; configuring Service Account impersonation instead..."
+    gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
+      --member="user:${USER_EMAIL}" \
+      --role="roles/iam.serviceAccountTokenCreator" \
+      --project="$PROJECT_ID" >/dev/null
+    sleep 5
+  fi
 fi
 
 python3 "$DEMO_DIR/bin/gcal_helper.py" reset "$PROJECT_ID" "$SA_EMAIL" "$USER_EMAIL"

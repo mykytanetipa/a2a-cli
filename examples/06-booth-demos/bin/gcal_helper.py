@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Real Google Calendar API v3 integration for Demo 2 using Service Account impersonation."""
+"""Real Google Calendar API v3 integration for Demo 2 (using Service Account key or impersonation)."""
+import base64
 import datetime
 import json
 import os
 import pathlib
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -14,6 +16,7 @@ import urllib.request
 DEMO_DIR = pathlib.Path(__file__).resolve().parent.parent
 STATE_FILE = DEMO_DIR / ".gcal-state.json"
 TOKEN_CACHE = pathlib.Path("/tmp/a2a-gcal-token.json")
+SA_KEY_FILE = pathlib.Path.home() / ".config" / "a2a-cal-sa.json"
 
 CALENDARS = {
     "my": {"summary": "Demo: My Calendar", "colorId": "14"},
@@ -29,6 +32,48 @@ def load_state() -> dict:
     return json.loads(STATE_FILE.read_text())
   except Exception:
     return {}
+
+
+def _b64url(data: bytes) -> str:
+  return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _token_from_sa_key(key_path: pathlib.Path) -> str:
+  key_data = json.loads(key_path.read_text())
+  now = int(time.time())
+  header = _b64url(json.dumps({"alg": "RS256", "typ": "JWT"}).encode())
+  claim = _b64url(
+      json.dumps({
+          "iss": key_data["client_email"],
+          "scope": "https://www.googleapis.com/auth/calendar",
+          "aud": "https://oauth2.googleapis.com/token",
+          "iat": now,
+          "exp": now + 3600,
+      }).encode()
+  )
+  signing_input = f"{header}.{claim}".encode("ascii")
+  with tempfile.NamedTemporaryFile("w", delete=False) as f:
+    f.write(key_data["private_key"])
+    pem_path = f.name
+  try:
+    proc = subprocess.run(
+        ["openssl", "dgst", "-sha256", "-sign", pem_path],
+        input=signing_input,
+        capture_output=True,
+        check=True,
+    )
+    sig = _b64url(proc.stdout)
+  finally:
+    pathlib.Path(pem_path).unlink(missing_ok=True)
+
+  jwt_assertion = f"{header}.{claim}.{sig}"
+  body = urllib.parse.urlencode({
+      "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      "assertion": jwt_assertion,
+  }).encode()
+  req = urllib.request.Request("https://oauth2.googleapis.com/token", data=body, method="POST")
+  with urllib.request.urlopen(req, timeout=10) as resp:
+    return json.loads(resp.read().decode())["access_token"]
 
 
 def get_access_token_and_project():
@@ -47,6 +92,22 @@ def get_access_token_and_project():
   sa_email = state.get("sa_email", "")
   quota_project = state.get("quota_project", "")
 
+  # 1. Fastest & zero IAM propagation delay: sign JWT with ~/.config/a2a-cal-sa.json
+  if SA_KEY_FILE.exists():
+    try:
+      token = _token_from_sa_key(SA_KEY_FILE)
+      TOKEN_CACHE.write_text(
+          json.dumps({
+              "access_token": token,
+              "expires_at": time.time() + 3000,
+              "quota_project": quota_project,
+          })
+      )
+      return token, quota_project
+    except Exception as e:
+      sys.stderr.write(f"[warn] SA key token exchange failed: {e}\n")
+
+  # 2. Fallback: gcloud service account impersonation
   if sa_email:
     proc = subprocess.run(
         [
@@ -70,9 +131,10 @@ def get_access_token_and_project():
           })
       )
       return token, quota_project
+    sys.stderr.write(f"[warn] gcloud impersonation stderr: {proc.stderr}\n")
 
   raise RuntimeError(
-      "Google Calendar token not initialized. Run ./examples/06-booth-demos/bin/reset-calendars first."
+      "Could not obtain Google Calendar token. Check gcloud login/project and re-run reset-calendars."
   )
 
 
@@ -96,11 +158,15 @@ def gcal_request(method: str, path: str, body=None, query=None):
       return json.loads(raw) if raw else {}
 
   try:
-    return _do(True)
+    return _do(False)
   except urllib.error.HTTPError as e:
     err_body = e.read().decode(errors="ignore")
-    if quota_project and ("USER_PROJECT_DENIED" in err_body or "SERVICE_DISABLED" in err_body or e.code == 403):
-      return _do(False)
+    if quota_project:
+      try:
+        return _do(True)
+      except urllib.error.HTTPError as e2:
+        err_body = e2.read().decode(errors="ignore")
+        raise RuntimeError(f"Google Calendar API {method} {path} failed ({e2.code}): {err_body}") from e2
     raise RuntimeError(f"Google Calendar API {method} {path} failed ({e.code}): {err_body}") from e
 
 
