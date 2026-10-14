@@ -141,6 +141,12 @@ class EdgeSharedPushNotificationStore extends InMemoryPushNotificationStore {
       return c;
     });
   }
+
+  async loadWithMetadata(taskId, context) {
+    const configs = await this.load(taskId, context);
+    const wireVersion = context?.requestedVersion || A2A_PROTOCOL_VERSION;
+    return configs.map((config) => ({ config, wireVersion }));
+  }
 }
 
 /**

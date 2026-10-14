@@ -35,6 +35,10 @@ class Proxy(BaseHTTPRequestHandler):
         url = f"http://127.0.0.1:{target_port}{self.path}"
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length) if length > 0 else None
+        if self.path.startswith("/webhook") and body:
+            text_body = body.decode("utf-8", errors="ignore")
+            if "TASK_STATE_COMPLETED" in text_body:
+                print("\033[1;35m🔔 [A2A Push Notification] Sent TASK_STATE_COMPLETED webhook -> http://127.0.0.1:19081/webhook\033[0m", flush=True)
         headers = {k: v for k, v in self.headers.items() if k.lower() != "host"}
         req = urllib.request.Request(url, data=body, headers=headers, method=self.command)
         try:
