@@ -39,15 +39,15 @@ def main():
     sys.exit(1)
 
   args = sys.argv[1:]
-  # Pass non-interactive (`-p` / `--print`) or non-TTY runs directly to real `claude`
+  # Pass non-interactive (`-p` / `--print`), nested, or non-TTY runs directly to real `claude`
   if (
       "-p" in args
       or "--print" in args
       or not os.isatty(0)
       or not os.isatty(1)
       or os.environ.get("DEMO_NO_A2A") == "1"
+      or os.environ.get("A2A_CLAUDE_WRAPPED") == "1"
   ):
-    os.environ["PATH"] = cleaned_path
     os.execv(real_claude, [real_claude] + args)
 
   is_continue = "-c" in args or "--continue" in args
@@ -67,7 +67,7 @@ def main():
 
   pid, master_fd = pty.fork()
   if pid == 0:
-    os.environ["PATH"] = cleaned_path
+    os.environ["A2A_CLAUDE_WRAPPED"] = "1"
     os.execv(real_claude, [real_claude] + args)
 
   def sync_winsize():
