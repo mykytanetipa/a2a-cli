@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# One-command setup for Demo 1 (Custom Gaming PC Build — MockEgg vs. RigFoundry):
+# 1. Installs any missing CLI prerequisites via Homebrew (go, node, python3, cloudflared, claude).
+# 2. Builds the `a2a` CLI binary from source.
+# 3. Bundles & deploys the `mockegg` and `rigfoundry` Cloudflare Workers (`@a2a-js/sdk`).
+set -euo pipefail
+
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEMO_DIR="$(cd "$BIN_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$DEMO_DIR/../.." && pwd)"
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🚀 Setting up Demo 1: Custom Gaming PC Build (MockEgg vs. RigFoundry)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+ensure_brew() {
+  if ! command -v brew >/dev/null 2>&1; then
+    echo "📦 Installing Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  fi
+}
+
+echo "🔍 Step 1/3: Checking prerequisites (go, node, python3, cloudflared, claude)..."
+if ! command -v go >/dev/null 2>&1; then
+  ensure_brew && echo "📦 Installing Go..." && brew install go
+fi
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  ensure_brew && echo "📦 Installing Node.js..." && brew install node
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  ensure_brew && echo "📦 Installing Python 3..." && brew install python
+fi
+if ! command -v cloudflared >/dev/null 2>&1; then
+  ensure_brew && echo "📦 Installing cloudflared..." && brew install cloudflared
+fi
+
+REAL_CLAUDE="$(python3 -c '
+import os, shutil, sys
+self_dir = os.path.realpath(sys.argv[1])
+paths = [p for p in os.environ.get("PATH", "").split(os.pathsep) if p and os.path.realpath(p) != self_dir]
+print(shutil.which("claude", path=os.pathsep.join(paths)) or "")
+' "$BIN_DIR")"
+
+if [[ -z "$REAL_CLAUDE" ]]; then
+  echo "📦 Installing Claude Code CLI (@anthropic-ai/claude-code)..."
+  npm install -g @anthropic-ai/claude-code
+fi
+echo "   ✅ All Demo 1 CLI prerequisites installed."
+
+echo ""
+echo "🔨 Step 2/3: Building a2a CLI binary..."
+(cd "$REPO_ROOT" && go build -o "$BIN_DIR/a2a" ./cmd/a2a)
+echo "   ✅ Built $BIN_DIR/a2a"
+
+echo ""
+echo "☁️  Step 3/3: Deploying Demo 1 Cloudflare Workers (mockegg & rigfoundry)..."
+"$BIN_DIR/deploy-pc-cf"
+
+source "$DEMO_DIR/pc-worker/.deployed-urls.env"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ Demo 1 Setup Complete!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Open 3 terminal windows in the repo root and run:"
+echo ""
+echo "  Window 3 (RigFoundry A2A Server):  ./examples/06-booth-demos/bin/start-pc-bot"
+echo "  Window 1 (Caller WITHOUT A2A):     ./examples/06-booth-demos/bin/start-pc-caller-no-a2a"
+echo "  Window 2 (Caller WITH A2A):        ./examples/06-booth-demos/bin/start-pc-caller"
+echo ""
+echo "Prompt to paste into Window 1 & Window 2:"
+echo "  I want to build a new custom PC for video games from ${MOCKEGG_URL}, make it unique and distinctive, but perform well. Give the best I can get for \$1000. You know me and my preferences."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

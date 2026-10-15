@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# One-command setup for Demo 2 (3-Way Executive Calendar Scheduling):
+# 1. Installs any missing CLI prerequisites via Homebrew (go, node, python3, openssl, cloudflared, gcloud, claude).
+# 2. Builds the `a2a` CLI binary from source.
+# 3. Bundles & deploys the `vp-schedule-bot` and `alex-schedule-bot` Cloudflare Workers (`@a2a-js/sdk`).
+# 4. Provisions the GCP Service Account + creates/shares/seeds all 3 real Google Calendars for next week.
+set -euo pipefail
+
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEMO_DIR="$(cd "$BIN_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$DEMO_DIR/../.." && pwd)"
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🚀 Setting up Demo 2: 3-Way Executive Calendar Scheduling"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+ensure_brew() {
+  if ! command -v brew >/dev/null 2>&1; then
+    echo "📦 Installing Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  fi
+}
+
+echo "🔍 Step 1/4: Checking prerequisites (go, node, python3, openssl, cloudflared, gcloud, claude)..."
+if ! command -v go >/dev/null 2>&1; then
+  ensure_brew && echo "📦 Installing Go..." && brew install go
+fi
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  ensure_brew && echo "📦 Installing Node.js..." && brew install node
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  ensure_brew && echo "📦 Installing Python 3..." && brew install python
+fi
+if ! command -v openssl >/dev/null 2>&1; then
+  ensure_brew && echo "📦 Installing OpenSSL..." && brew install openssl
+fi
+if ! command -v cloudflared >/dev/null 2>&1; then
+  ensure_brew && echo "📦 Installing cloudflared..." && brew install cloudflared
+fi
+if ! command -v gcloud >/dev/null 2>&1; then
+  ensure_brew && echo "📦 Installing Google Cloud SDK (gcloud)..." && brew install --cask google-cloud-sdk
+fi
+
+REAL_CLAUDE="$(python3 -c '
+import os, shutil, sys
+self_dir = os.path.realpath(sys.argv[1])
+paths = [p for p in os.environ.get("PATH", "").split(os.pathsep) if p and os.path.realpath(p) != self_dir]
+print(shutil.which("claude", path=os.pathsep.join(paths)) or "")
+' "$BIN_DIR")"
+
+if [[ -z "$REAL_CLAUDE" ]]; then
+  echo "📦 Installing Claude Code CLI (@anthropic-ai/claude-code)..."
+  npm install -g @anthropic-ai/claude-code
+fi
+echo "   ✅ All Demo 2 CLI prerequisites installed."
+
+echo ""
+echo "🔨 Step 2/4: Building a2a CLI binary..."
+(cd "$REPO_ROOT" && go build -o "$BIN_DIR/a2a" ./cmd/a2a)
+echo "   ✅ Built $BIN_DIR/a2a"
+
+echo ""
+echo "☁️  Step 3/4: Deploying Demo 2 Cloudflare Workers (vp-schedule-bot & alex-schedule-bot)..."
+"$BIN_DIR/deploy-calendar-cf"
+
+echo ""
+echo "📅 Step 4/4: Provisioning & seeding the 3 Google Calendars..."
+"$BIN_DIR/reset-calendars"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ Demo 2 Setup Complete!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Open 4 terminal windows in the repo root (plus https://calendar.google.com in your browser) and run:"
+echo ""
+echo "  Window 3 (VP Schedule-Bot Server):    ./examples/06-booth-demos/bin/start-calendar-bot"
+echo "  Window 4 (Alex Schedule-Bot Server):  ./examples/06-booth-demos/bin/start-alex-bot"
+echo "  Window 1 (Caller WITHOUT A2A):        ./examples/06-booth-demos/bin/start-calendar-caller-no-a2a"
+echo "  Window 2 (Caller WITH A2A):           ./examples/06-booth-demos/bin/start-calendar-caller"
+echo ""
+echo "Prompt to paste into Window 1 & Window 2:"
+echo "  Schedule a 30-minute 1:1 with my VP this week"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
