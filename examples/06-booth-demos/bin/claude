@@ -50,15 +50,7 @@ def main():
   ):
     os.execv(real_claude, [real_claude] + args)
 
-  is_continue = "-c" in args or "--continue" in args
   sock_path = "/tmp/a2a-wake.sock"
-  pending_file = "/tmp/a2a-pending-wake"
-
-  if not is_continue:
-    try:
-      os.unlink(pending_file)
-    except FileNotFoundError:
-      pass
 
   try:
     os.unlink(sock_path)
@@ -102,16 +94,6 @@ def main():
   srv.bind(sock_path)
   srv.listen(5)
   srv.setblocking(False)
-
-  if is_continue and os.path.exists(pending_file):
-    try:
-      with open(pending_file, "r", encoding="utf-8") as pf:
-        msg = pf.read().strip()
-      os.unlink(pending_file)
-      if msg:
-        threading.Timer(2.0, inject_prompt, args=(msg,)).start()
-    except Exception:
-      pass
 
   old_termios = None
   try:

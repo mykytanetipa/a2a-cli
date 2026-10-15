@@ -27,7 +27,6 @@ port = int(sys.argv[4])
 done = False
 
 sock_path = "/tmp/a2a-wake.sock"
-pending_file = "/tmp/a2a-pending-wake"
 
 def notify():
     subprocess.run([
@@ -50,18 +49,12 @@ def notify():
         except Exception:
             woke_live = False
 
-    if not woke_live:
+    if not woke_live and caller_tty:
         try:
-            with open(pending_file, "w", encoding="utf-8") as pf:
-                pf.write(wake_msg + "\n")
+            with open(caller_tty, "w") as f:
+                f.write(f"\n\033[1;32m🔔 [A2A PUSH NOTIFICATION] Webhook received TASK_STATE_COMPLETED for Task {task_id}!\033[0m\n")
         except Exception:
             pass
-        if caller_tty:
-            try:
-                with open(caller_tty, "w") as f:
-                    f.write(f"\n\033[1;32m🔔 [A2A PUSH NOTIFICATION] Webhook received TASK_STATE_COMPLETED for Task {task_id}!\033[0m\n")
-            except Exception:
-                pass
 
 class WebhookHandler(BaseHTTPRequestHandler):
     def do_POST(self):
