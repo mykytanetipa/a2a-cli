@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Starts a local HTTP webhook listener on http://127.0.0.1:<port>/webhook.
-# When the A2A server pushes `TASK_STATE_COMPLETED` to the webhook, triggers the macOS notification!
+# When the A2A server pushes `TASK_STATE_COMPLETED` to the webhook:
+# 1. Fires the macOS desktop notification + sound,
+# 2. If Claude is open (`/tmp/a2a-wake.sock`), auto-injects a wake prompt into Claude's stdin,
+# 3. If Claude was closed via `/exit`, prints the banner to the terminal and writes `/tmp/a2a-pending-wake`
+#    so `start-pc-caller -c` auto-fetches the completed task on resume!
 set -eo pipefail
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$BIN_DIR:$PATH"
@@ -13,14 +17,18 @@ if [[ -z "$TASK_ID" ]]; then
   exit 0
 fi
 
-python3 - "$TASK_ID" "$CALLER_TTY" "$WEBHOOK_PORT" << 'PYEOF'
-import subprocess, sys
+python3 - "$AGENT_URL" "$TASK_ID" "$CALLER_TTY" "$WEBHOOK_PORT" << 'PYEOF'
+import os, socket, subprocess, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-task_id = sys.argv[1]
-caller_tty = sys.argv[2]
-port = int(sys.argv[3])
+agent_url = sys.argv[1]
+task_id = sys.argv[2]
+caller_tty = sys.argv[3]
+port = int(sys.argv[4])
 done = False
+
+sock_path = "/tmp/a2a-wake.sock"
+pending_file = "/tmp/a2a-pending-wake"
 
 def notify():
     subprocess.run([
@@ -28,12 +36,33 @@ def notify():
         f'display notification "Task {task_id} completed — $999 White+Walnut Build verified & ready!" with title "🔔 A2A Push Notification (RigFoundry)" sound name "Glass"'
     ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.Popen(["afplay", "/System/Library/Sounds/Glass.aiff"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if caller_tty:
+
+    wake_msg = f"🔔 [A2A Push Notification] Task {task_id} on {agent_url} is now TASK_STATE_COMPLETED. Run `a2a task get` to retrieve the completed build."
+
+    woke_live = False
+    if os.path.exists(sock_path):
         try:
-            with open(caller_tty, "w") as f:
-                f.write(f"\n\033[1;32m🔔 [A2A PUSH NOTIFICATION] Webhook received TASK_STATE_COMPLETED for Task {task_id}!\033[0m\n")
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(2.0)
+            s.connect(sock_path)
+            s.sendall(wake_msg.encode("utf-8"))
+            s.close()
+            woke_live = True
+        except Exception:
+            woke_live = False
+
+    if not woke_live:
+        try:
+            with open(pending_file, "w", encoding="utf-8") as pf:
+                pf.write(wake_msg + "\n")
         except Exception:
             pass
+        if caller_tty:
+            try:
+                with open(caller_tty, "w") as f:
+                    f.write(f"\n\033[1;32m🔔 [A2A PUSH NOTIFICATION] Webhook received TASK_STATE_COMPLETED for Task {task_id}!\033[0m\n")
+            except Exception:
+                pass
 
 class WebhookHandler(BaseHTTPRequestHandler):
     def do_POST(self):
