@@ -36,12 +36,19 @@ fi
 
 TASK_ID="${PARSED%%|*}"
 AGENT_URL="${PARSED#*|}"
-CALLER_TTY="$(ps -o tty= -p $PPID 2>/dev/null | tr -d ' ' || true)"
-if [[ -n "$CALLER_TTY" && "$CALLER_TTY" != "??" ]]; then
-  CALLER_TTY="/dev/${CALLER_TTY}"
-else
-  CALLER_TTY=""
-fi
+CALLER_TTY="$(python3 -c '
+import os, subprocess
+pid = os.getppid()
+for _ in range(6):
+    if pid <= 1:
+        break
+    tty = subprocess.run(["ps", "-o", "tty=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    if tty and tty != "??":
+        print(f"/dev/{tty}")
+        break
+    ppid = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    pid = int(ppid) if ppid.isdigit() else 0
+' 2>/dev/null || true)"
 
 # Kill any stale listener on 19081 and start a fresh detached listener for this task
 lsof -ti tcp:19081 | xargs kill -9 2>/dev/null || true
