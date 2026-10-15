@@ -29,12 +29,6 @@ done = False
 sock_path = "/tmp/a2a-wake.sock"
 
 def notify():
-    subprocess.run([
-        "osascript", "-e",
-        f'display notification "Task {task_id} completed — $999 White+Walnut Build verified & ready!" with title "🔔 A2A Push Notification (RigFoundry)" sound name "Glass"'
-    ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.Popen(["afplay", "/System/Library/Sounds/Glass.aiff"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
     wake_msg = f"🔔 [A2A Push Notification] Task {task_id} on {agent_url} is now TASK_STATE_COMPLETED. Run a2a task get to retrieve the completed build."
 
     woke_live = False
@@ -49,12 +43,18 @@ def notify():
         except Exception:
             woke_live = False
 
-    if not woke_live and caller_tty:
-        try:
-            with open(caller_tty, "w") as f:
-                f.write(f"\n\033[1;32m🔔 [A2A PUSH NOTIFICATION] Webhook received TASK_STATE_COMPLETED for Task {task_id}!\033[0m\n")
-        except Exception:
-            pass
+    if not woke_live:
+        subprocess.run([
+            "osascript", "-e",
+            f'display notification "Task {task_id} completed — $999 White+Walnut Build verified & ready!" with title "🔔 A2A Push Notification (RigFoundry)" sound name "Glass"'
+        ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(["afplay", "/System/Library/Sounds/Glass.aiff"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if caller_tty:
+            try:
+                with open(caller_tty, "w") as f:
+                    f.write(f"\n\033[1;32m🔔 [A2A PUSH NOTIFICATION] Webhook received TASK_STATE_COMPLETED for Task {task_id}!\033[0m\n")
+            except Exception:
+                pass
 
 class WebhookHandler(BaseHTTPRequestHandler):
     def do_POST(self):
