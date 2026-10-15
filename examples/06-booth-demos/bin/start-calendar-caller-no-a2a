@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-export PATH="$DEMO_DIR/bin:$PATH"
 export DEMO_NO_A2A=1
-rm -f /tmp/ea-email-round /tmp/ea-email-booked
 rm -rf ~/.cache/a2a-cli/discover
 rm -rf ~/.claude/projects/*calendar-caller*/memory 2>/dev/null || true
-cd "$DEMO_DIR/calendar-caller"
+
+WORKDIR="/tmp/calendar-caller"
+rm -rf "$WORKDIR"
+mkdir -p "$WORKDIR/bin" "$WORKDIR/.claude"
+cp "$DEMO_DIR/calendar-caller/CLAUDE.md" "$WORKDIR/CLAUDE.md"
+cp "$DEMO_DIR/calendar-caller/.claude/settings.json" "$WORKDIR/.claude/settings.json"
+cp "$DEMO_DIR/bin/corp-directory" "$DEMO_DIR/bin/my-calendar" "$DEMO_DIR/bin/send-email" "$DEMO_DIR/bin/gcal_helper.py" "$WORKDIR/bin/"
+if [[ -d "$DEMO_DIR/calendar-worker" ]]; then
+  cp -r "$DEMO_DIR/calendar-worker" "$WORKDIR/calendar-worker"
+fi
+export PATH="$WORKDIR/bin:$PATH"
+cd "$WORKDIR"
+
 exec claude --strict-mcp-config \
-  --disallowedTools "mcp__claude_ai_Google_Calendar__*,mcp__claude_ai_Gmail__*" \
+  --disallowedTools "Skill,mcp__claude_ai_Google_Calendar__*,mcp__claude_ai_Gmail__*" \
   --settings '{"disableAllHooks":true,"enabledPlugins":{"a2a-cli@a2a":false}}' \
   --append-system-prompt-file CLAUDE.md "$@"
