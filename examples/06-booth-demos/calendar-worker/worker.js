@@ -70,47 +70,17 @@ const ALEX_CARD_TEMPLATE = {
   ],
 };
 
-async function fallbackVpReply(userText) {
-  const lower = userText.toLowerCase();
-  if (!lower.includes("15:30") && !lower.includes("3:30") && !lower.includes("none")) {
-    return [
-      "Here are VP Yaroslav's 3 open 30-minute slots this week:",
-      "- **Tuesday 10:00–10:30**",
-      "- **Wednesday 14:00–14:30**",
-      "- **Thursday 11:00–11:30**",
-      "Which of these works for your calendar?",
-    ].join("\n");
-  }
-  return [
-    "I contacted Director Alex's A2A agent (`Alex Schedule-Bot`) and moved their Thursday 15:30–16:00 Weekly Sync to Friday 11:00–11:30 (`CAL-RESCHED-409`).",
-    "- **Confirmed Slot:** **Thursday 15:30–16:00** with VP Yaroslav",
-    "- **Calendar Invite ID:** **`CAL-INV-8842`**",
-  ].join("\n");
-}
-
-async function fallbackAlexReply() {
-  return [
-    "Friday 11:00–11:30 is free on Director Alex's calendar.",
-    "Moved the Weekly Sync with VP Yaroslav from Thursday 15:30–16:00 to Friday 11:00–11:30 (`CAL-RESCHED-409`). Thursday 15:30–16:00 is now open.",
-  ].join("\n");
-}
-
 const vpAgent = createA2AWorkerAgent({
   cardTemplate: VP_CARD_TEMPLATE,
   defaultUpstreamUrl: "",
-  fallbackFn: fallbackVpReply,
 });
 
 const alexAgent = createA2AWorkerAgent({
   cardTemplate: ALEX_CARD_TEMPLATE,
   defaultUpstreamUrl: "",
-  fallbackFn: fallbackAlexReply,
 });
 
 function detectRole(url) {
-  if (url.hostname.startsWith("vp-sarah") || url.searchParams.get("role") === "sarah") {
-    return "sarah";
-  }
   if (url.hostname.startsWith("alex") || url.searchParams.get("role") === "alex") {
     return "alex";
   }
@@ -121,18 +91,6 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const role = detectRole(url);
-    const ua = request.headers.get("user-agent") || "";
-
-    // Sarah Chen's profile (`vp-sarah`) has NO A2A agent card (returns 404)
-    if (role === "sarah") {
-      if (url.pathname.endsWith("/.well-known/agent-card.json")) {
-        return new Response("Not Found", { status: 404 });
-      }
-      return new Response(
-        `<!DOCTYPE html><html><body><h1>Sarah Chen — VP of Product</h1><p>Direct Calendar Access: 403 Forbidden. Please email Executive Assistant (ea-sarah@0-a.org) to coordinate 1:1 scheduling.</p></body></html>`,
-        { headers: { "Content-Type": "text/html; charset=utf-8" } }
-      );
-    }
 
     const activeAgent = role === "alex" ? alexAgent : vpAgent;
     const a2aResp = await activeAgent.handleFetch(request, env, ctx);

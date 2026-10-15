@@ -156,48 +156,9 @@ const RIGFOUNDRY_CARD_TEMPLATE = {
   ],
 };
 
-async function fallbackRigFoundryReply(userText) {
-  const lower = userText.toLowerCase();
-  const isTurn2 =
-    lower.includes("reuse") ||
-    lower.includes("existing") ||
-    lower.includes("1)") ||
-    lower.includes("strict") ||
-    lower.includes("walnut") ||
-    lower.includes("this week");
-  if (!isTurn2) {
-    return [
-      "Before I lock in parts from RigFoundry's private warehouse and run 3D millimeter clearance checks, please clarify:",
-      "1. Can you reuse an existing NVMe SSD & OS license, or do we need new ones in the $1,000 budget?",
-      "2. Do you prefer 64GB RAM or 32GB DDR5-6000 CL30 paired with a 16GB 1440p GPU?",
-      "3. Do you want 12-month 0% APR financing (up to $1,250) or a strict $1,000 cap?",
-      "4. Any case aesthetic/RGB rules, and do you need in-stock parts shipping this week vs. waiting 2 weeks for a backordered RX 7900 GRE?",
-      "",
-      "Note: Once you reply with your answers, running the full 3D CAD millimeter clearance verification and warehouse bin lock is a long-running task (~20–30s).",
-    ].join("\n");
-  }
-  await new Promise((r) => setTimeout(r, 8000));
-  return [
-    "### RigFoundry Verified Custom Build (`RF-VIP-999` — All In Stock, Zero RGB)",
-    "| Part | Model | Stock | Price |",
-    "|---|---|---|---|",
-    "| CPU + Cooler | AMD Ryzen 5 7600 + 54mm Non-RGB Wraith Stealth | In Stock | $185 |",
-    "| Motherboard | ASRock B650M Pro RS WiFi (White/Silver, Zero RGB) | In Stock | $135 |",
-    "| Memory | TEAMGROUP T-Create Expert 32GB DDR5-6000 CL30 White | In Stock | $85 |",
-    "| GPU | Sapphire PURE RX 7800 XT 16GB Arctic White (320mm, VIP Bundle) | In Stock | $449 |",
-    "| Case | Lian Li DAN A3-mATX Wood Edition (White + Walnut, Zero RGB) | In Stock | $85 |",
-    "| PSU | Corsair RM750e 750W ATX 3.0 (140mm, VIP Bundle) | In Stock | $60 |",
-    "| Storage & OS | Reusing Customer's Existing NVMe SSD & OS | Reused | $0 |",
-    "| **Total** | **VIP-WHITE-WALNUT-BUNDLE Applied (Saves $147 vs MockEgg)** | **Ships Today** | **$999** |",
-    "",
-    "**3D Millimeter Clearance PASS:** Sapphire PURE RX 7800 XT (`320mm`) fits inside Lian Li DAN A3 (`334mm` max, `14mm` spare) alongside the `140mm` ATX PSU and `54mm` cooler (`165mm` max). *(Note: The backordered `335mm` RX 7900 GRE fails physical clearance by `1mm`.)*",
-  ].join("\n");
-}
-
 const rigfoundryAgent = createA2AWorkerAgent({
   cardTemplate: RIGFOUNDRY_CARD_TEMPLATE,
   defaultUpstreamUrl: "",
-  fallbackFn: fallbackRigFoundryReply,
 });
 
 function detectRole(url) {
