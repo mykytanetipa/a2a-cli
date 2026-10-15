@@ -1,6 +1,7 @@
 /**
  * Cloudflare Worker for Demo 1 (PC Build):
- * - `mockegg.<subdomain>.workers.dev`: Public 3-tier multi-page store (Department Hubs -> Category Pages -> Product Spec/Stock Pages).
+ * - `mockegg.<subdomain>.workers.dev`: Public 4-tier multi-page store
+ *   (Department Hubs -> Category/Paginated Pages -> Product Spec/Pricing Pages -> Live Warehouse Stock Pages).
  * - `rigfoundry.<subdomain>.workers.dev`: Full A2A v1.0 Server & Client powered by `@a2a-js/sdk`.
  */
 import { createA2AWorkerAgent } from "./a2a-worker-runtime.js";
@@ -16,12 +17,12 @@ function getMockEggHomeHtml(origin, rigfoundryUrl) {
   </section>
   <hr>
   <h2>Shop by Department</h2>
-  <p>Select a department URL below to browse component sub-categories, paginated listings, and individual product specification &amp; live inventory pages:</p>
+  <p>Select a department URL below to browse component sub-categories, paginated listings, product specification &amp; pricing sheets, and live warehouse stock pages:</p>
   <nav>
     <ul>
-      <li><a href="${origin}/departments/prebuilts">Pre-Built Gaming Desktops Department (${origin}/departments/prebuilts)</a> — Ready-to-ship gaming towers ($949 – $1,229)</li>
+      <li><a href="${origin}/departments/prebuilts">Pre-Built Gaming Desktops Department (${origin}/departments/prebuilts)</a> — Ready-to-ship desktop configurations</li>
       <li><a href="${origin}/departments/core">Core Components Department (${origin}/departments/core)</a> — Processors (CPUs), CPU Coolers, Motherboards &amp; DDR5 Memory</li>
-      <li><a href="${origin}/departments/gpus">Graphics Cards (GPUs) Department (${origin}/departments/gpus)</a> — Flagship 4K, 1440p &amp; 1080p GPUs (3-page paginated catalog)</li>
+      <li><a href="${origin}/departments/gpus">Graphics Cards (GPUs) Department (${origin}/departments/gpus)</a> — Radeon RX &amp; GeForce RTX Series (Paginated Catalog)</li>
       <li><a href="${origin}/departments/chassis-power">Enclosures, Power &amp; Storage Department (${origin}/departments/chassis-power)</a> — PC Cases, ATX 3.0 Power Supplies, NVMe SSDs &amp; OS</li>
     </ul>
   </nav>
@@ -36,28 +37,25 @@ function renderDeptPrebuilts(origin) {
 <body>
   <h1>MockEgg — Pre-Built Gaming Desktops</h1>
   <p><a href="${origin}/">← Back to MockEgg Home (${origin}/)</a></p>
-  <p><em>Fetch each product URL below to view full component specifications, case lighting details, and live warehouse stock status.</em></p>
+  <p><em>Fetch each product URL below to view retail pricing, full component specifications, case lighting details, and live warehouse stock links.</em></p>
   <table border="1" cellpadding="6">
-    <tr><th>SKU</th><th>System Name</th><th>Summary</th><th>Price</th><th>Spec &amp; Stock URL</th></tr>
+    <tr><th>SKU</th><th>System Name</th><th>Target Tier</th><th>Product Spec &amp; Pricing URL</th></tr>
     <tr>
       <td>ME-PB-101</td>
-      <td>MockEgg CyberPrism Tower</td>
-      <td>Ryzen 5 7600 / Radeon RX 7700 XT / 16GB DDR5 / 1TB NVMe</td>
-      <td>$999</td>
+      <td>MockEgg CyberPrism Gaming Tower</td>
+      <td>1440p Mid-Range Desktop</td>
       <td><a href="${origin}/product/ME-PB-101">${origin}/product/ME-PB-101</a></td>
     </tr>
     <tr>
       <td>ME-PB-102</td>
-      <td>MockEgg NeonBlade System</td>
-      <td>Core i5-13400F / GeForce RTX 4060 / 16GB DDR5 / 1TB NVMe</td>
-      <td>$949</td>
+      <td>MockEgg NeonBlade Gaming System</td>
+      <td>1080p Entry Desktop</td>
       <td><a href="${origin}/product/ME-PB-102">${origin}/product/ME-PB-102</a></td>
     </tr>
     <tr>
       <td>ME-PB-103</td>
-      <td>MockEgg Creator &amp; Gaming Pro 1440p</td>
-      <td>Ryzen 5 7600 / Radeon RX 7800 XT / 32GB DDR5 / 1TB NVMe</td>
-      <td>$1,229</td>
+      <td>MockEgg Creator &amp; Gaming Pro</td>
+      <td>1440p High-Refresh Desktop</td>
       <td><a href="${origin}/product/ME-PB-103">${origin}/product/ME-PB-103</a></td>
     </tr>
   </table>
@@ -72,12 +70,12 @@ function renderDeptCore(origin) {
 <body>
   <h1>MockEgg — Core Components Department</h1>
   <p><a href="${origin}/">← Back to MockEgg Home (${origin}/)</a></p>
-  <p>Browse individual component category URLs below to view models, pricing, and product specification sheets:</p>
+  <p>Browse individual component category URLs below to view models and product specification sheets:</p>
   <ul>
-    <li><a href="${origin}/catalog/cpus">Processors (CPUs): ${origin}/catalog/cpus</a> — AMD Socket AM5 &amp; Intel LGA1700 Processors</li>
-    <li><a href="${origin}/catalog/coolers">CPU Coolers: ${origin}/catalog/coolers</a> — Air &amp; Liquid CPU Coolers (with height/RGB specs)</li>
-    <li><a href="${origin}/catalog/motherboards">Motherboards: ${origin}/catalog/motherboards</a> — mATX &amp; ATX Motherboards</li>
-    <li><a href="${origin}/catalog/memory">DDR5 Memory: ${origin}/catalog/memory</a> — 32GB &amp; 64GB DDR5 RAM Kits</li>
+    <li><a href="${origin}/catalog/cpus">Processors (CPUs): ${origin}/catalog/cpus</a> — AMD Socket AM5 Processors</li>
+    <li><a href="${origin}/catalog/coolers">CPU Coolers: ${origin}/catalog/coolers</a> — Air &amp; Liquid CPU Coolers</li>
+    <li><a href="${origin}/catalog/motherboards">Motherboards: ${origin}/catalog/motherboards</a> — Socket AM5 Motherboards</li>
+    <li><a href="${origin}/catalog/memory">DDR5 Memory: ${origin}/catalog/memory</a> — DDR5 RAM Kits</li>
   </ul>
 </body>
 </html>`;
@@ -86,17 +84,17 @@ function renderDeptCore(origin) {
 function renderDeptGpusPage1(origin) {
   return `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8"><title>MockEgg — Graphics Cards (Page 1 of 3: Enthusiast 4K Series)</title></head>
+<head><meta charset="utf-8"><title>MockEgg — Graphics Cards (Page 1: Enthusiast 4K Series)</title></head>
 <body>
-  <h1>MockEgg — Graphics Cards (Page 1 of 3: Enthusiast 4K Series)</h1>
-  <p><strong>Next Page (Upper-Midrange 1440p GPUs): <a href="${origin}/departments/gpus/page-2">${origin}/departments/gpus/page-2</a></strong> | <strong>Page 3 (Value 1440p/1080p GPUs): <a href="${origin}/departments/gpus/page-3">${origin}/departments/gpus/page-3</a></strong></p>
+  <h1>MockEgg — Graphics Cards (Page 1: Enthusiast 4K Series)</h1>
+  <p><strong>Next Page (1440p Performance Series): <a href="${origin}/departments/gpus/page-2">${origin}/departments/gpus/page-2</a></strong></p>
   <table border="1" cellpadding="6">
-    <tr><th>SKU</th><th>Model</th><th>VRAM</th><th>Retail Price</th><th>Spec &amp; Stock URL</th></tr>
-    <tr><td>ME-GPU-4090</td><td>ASUS ROG Strix GeForce RTX 4090 OC</td><td>24GB GDDR6X</td><td>$1,799</td><td><a href="${origin}/product/ME-GPU-4090">${origin}/product/ME-GPU-4090</a></td></tr>
-    <tr><td>ME-GPU-4080S</td><td>MSI Gaming X Slim GeForce RTX 4080 Super</td><td>16GB GDDR6X</td><td>$1,049</td><td><a href="${origin}/product/ME-GPU-4080S">${origin}/product/ME-GPU-4080S</a></td></tr>
-    <tr><td>ME-GPU-7900XTX</td><td>Sapphire NITRO+ Radeon RX 7900 XTX</td><td>24GB GDDR6</td><td>$949</td><td><a href="${origin}/product/ME-GPU-7900XTX">${origin}/product/ME-GPU-7900XTX</a></td></tr>
+    <tr><th>SKU</th><th>Model</th><th>VRAM</th><th>Product Spec &amp; Pricing URL</th></tr>
+    <tr><td>ME-GPU-4090</td><td>ASUS ROG Strix GeForce RTX 4090 OC</td><td>24GB GDDR6X</td><td><a href="${origin}/product/ME-GPU-4090">${origin}/product/ME-GPU-4090</a></td></tr>
+    <tr><td>ME-GPU-4080S</td><td>MSI Gaming X Slim GeForce RTX 4080 Super</td><td>16GB GDDR6X</td><td><a href="${origin}/product/ME-GPU-4080S">${origin}/product/ME-GPU-4080S</a></td></tr>
+    <tr><td>ME-GPU-7900XTX</td><td>Sapphire NITRO+ Radeon RX 7900 XTX</td><td>24GB GDDR6</td><td><a href="${origin}/product/ME-GPU-7900XTX">${origin}/product/ME-GPU-7900XTX</a></td></tr>
   </table>
-  <p>Looking for 1440p GPUs under $600? Continue to Page 2: <a href="${origin}/departments/gpus/page-2">${origin}/departments/gpus/page-2</a></p>
+  <p>Looking for midrange 1440p GPUs? Continue to Page 2: <a href="${origin}/departments/gpus/page-2">${origin}/departments/gpus/page-2</a></p>
 </body>
 </html>`;
 }
@@ -104,17 +102,17 @@ function renderDeptGpusPage1(origin) {
 function renderDeptGpusPage2(origin) {
   return `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8"><title>MockEgg — Graphics Cards (Page 2 of 3: 16GB 1440p Series)</title></head>
+<head><meta charset="utf-8"><title>MockEgg — Graphics Cards (Page 2: 16GB 1440p Series)</title></head>
 <body>
-  <h1>MockEgg — Graphics Cards (Page 2 of 3: 16GB 1440p Series)</h1>
-  <p><a href="${origin}/departments/gpus">← Page 1</a> | <strong>Next Page (12GB &amp; 8GB GPUs under $450): <a href="${origin}/departments/gpus/page-3">${origin}/departments/gpus/page-3</a></strong></p>
-  <p><em>Fetch each product URL below to check live warehouse stock status, card length (mm), and RGB lighting details.</em></p>
+  <h1>MockEgg — Graphics Cards (Page 2: 16GB 1440p Series)</h1>
+  <p><a href="${origin}/departments/gpus">← Page 1</a> | <strong>Next Page (12GB &amp; 8GB Value Series): <a href="${origin}/departments/gpus/page-3">${origin}/departments/gpus/page-3</a></strong></p>
+  <p><em>Fetch each product URL below to view retail pricing, RGB lighting details, dimensions, and live warehouse stock links.</em></p>
   <table border="1" cellpadding="6">
-    <tr><th>SKU</th><th>Model</th><th>VRAM</th><th>Retail Price</th><th>Spec &amp; Stock URL</th></tr>
-    <tr><td>ME-GPU-7900GRE</td><td>XFX Radeon RX 7900 GRE Matte Black</td><td>16GB GDDR6</td><td>$549</td><td><a href="${origin}/product/ME-GPU-7900GRE">${origin}/product/ME-GPU-7900GRE</a></td></tr>
-    <tr><td>ME-GPU-7800W</td><td>Sapphire PURE Radeon RX 7800 XT Arctic White</td><td>16GB GDDR6</td><td>$519</td><td><a href="${origin}/product/ME-GPU-7800W">${origin}/product/ME-GPU-7800W</a></td></tr>
+    <tr><th>SKU</th><th>Model</th><th>VRAM</th><th>Product Spec &amp; Pricing URL</th></tr>
+    <tr><td>ME-GPU-7900GRE</td><td>XFX Radeon RX 7900 GRE Series</td><td>16GB GDDR6</td><td><a href="${origin}/product/ME-GPU-7900GRE">${origin}/product/ME-GPU-7900GRE</a></td></tr>
+    <tr><td>ME-GPU-7800W</td><td>Sapphire PURE Radeon RX 7800 XT Series</td><td>16GB GDDR6</td><td><a href="${origin}/product/ME-GPU-7800W">${origin}/product/ME-GPU-7800W</a></td></tr>
   </table>
-  <p>Need a lower-priced GPU to fit a $1,000 total build budget? Check Page 3: <a href="${origin}/departments/gpus/page-3">${origin}/departments/gpus/page-3</a></p>
+  <p>Need a lower-cost GPU to fit a $1,000 build budget? Continue to Page 3: <a href="${origin}/departments/gpus/page-3">${origin}/departments/gpus/page-3</a></p>
 </body>
 </html>`;
 }
@@ -122,15 +120,15 @@ function renderDeptGpusPage2(origin) {
 function renderDeptGpusPage3(origin) {
   return `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8"><title>MockEgg — Graphics Cards (Page 3 of 3: Midrange 12GB & 8GB Series)</title></head>
+<head><meta charset="utf-8"><title>MockEgg — Graphics Cards (Page 3: 12GB & 8GB Value Series)</title></head>
 <body>
-  <h1>MockEgg — Graphics Cards (Page 3 of 3: Midrange 12GB &amp; 8GB Series)</h1>
+  <h1>MockEgg — Graphics Cards (Page 3: 12GB &amp; 8GB Value Series)</h1>
   <p><a href="${origin}/departments/gpus/page-2">← Page 2 (16GB GPUs)</a> | <a href="${origin}/">MockEgg Home</a></p>
-  <p><em>Fetch each product URL below to check live warehouse stock status, card length (mm), and RGB lighting details.</em></p>
+  <p><em>Fetch each product URL below to view retail pricing, RGB lighting details, dimensions, and live warehouse stock links.</em></p>
   <table border="1" cellpadding="6">
-    <tr><th>SKU</th><th>Model</th><th>VRAM</th><th>Retail Price</th><th>Spec &amp; Stock URL</th></tr>
-    <tr><td>ME-GPU-7700XT</td><td>PowerColor Fighter Radeon RX 7700 XT</td><td>12GB GDDR6</td><td>$419</td><td><a href="${origin}/product/ME-GPU-7700XT">${origin}/product/ME-GPU-7700XT</a></td></tr>
-    <tr><td>ME-GPU-4060TI</td><td>MSI Ventus 2X Black GeForce RTX 4060 Ti</td><td>8GB GDDR6</td><td>$389</td><td><a href="${origin}/product/ME-GPU-4060TI">${origin}/product/ME-GPU-4060TI</a></td></tr>
+    <tr><th>SKU</th><th>Model</th><th>VRAM</th><th>Product Spec &amp; Pricing URL</th></tr>
+    <tr><td>ME-GPU-7700XT</td><td>PowerColor Fighter Radeon RX 7700 XT</td><td>12GB GDDR6</td><td><a href="${origin}/product/ME-GPU-7700XT">${origin}/product/ME-GPU-7700XT</a></td></tr>
+    <tr><td>ME-GPU-4060TI</td><td>MSI Ventus 2X GeForce RTX 4060 Ti</td><td>8GB GDDR6</td><td><a href="${origin}/product/ME-GPU-4060TI">${origin}/product/ME-GPU-4060TI</a></td></tr>
   </table>
 </body>
 </html>`;
@@ -145,9 +143,9 @@ function renderDeptChassisPower(origin) {
   <p><a href="${origin}/">← Back to MockEgg Home (${origin}/)</a></p>
   <p>Select a category URL below to browse cases, power supplies, storage drives, and operating systems:</p>
   <ul>
-    <li><a href="${origin}/catalog/cases">PC Cases &amp; SFF Enclosures: ${origin}/catalog/cases</a> — mATX Wood/Minimalist &amp; ATX Mid-Tower Cases</li>
-    <li><a href="${origin}/catalog/psus">Power Supplies (PSUs): ${origin}/catalog/psus</a> — ATX 3.0 &amp; SFX Modular Power Supplies</li>
-    <li><a href="${origin}/catalog/storage-os">NVMe SSD Storage &amp; Operating Systems: ${origin}/catalog/storage-os</a> — PCIe Gen4 M.2 SSDs &amp; Windows 11 OEM</li>
+    <li><a href="${origin}/catalog/cases">PC Cases &amp; Enclosures (Page 1 — ATX Towers): ${origin}/catalog/cases</a></li>
+    <li><a href="${origin}/catalog/psus">Power Supplies (PSUs): ${origin}/catalog/psus</a></li>
+    <li><a href="${origin}/catalog/storage-os">NVMe SSD Storage &amp; Operating Systems: ${origin}/catalog/storage-os</a></li>
   </ul>
 </body>
 </html>`;
@@ -160,10 +158,11 @@ function renderCatalogCpus(origin) {
 <body>
   <h1>MockEgg — Processors (CPUs)</h1>
   <p><a href="${origin}/departments/core">← Back to Core Components Department (${origin}/departments/core)</a></p>
+  <p><em>Fetch each product URL below to view retail price, bundled cooler details, and live warehouse stock links.</em></p>
   <table border="1" cellpadding="6">
-    <tr><th>SKU</th><th>Model</th><th>Socket</th><th>Retail Price</th><th>Spec &amp; Stock URL</th></tr>
-    <tr><td>ME-CPU-7600</td><td>AMD Ryzen 5 7600 6-Core / 12-Thread</td><td>AM5</td><td>$195</td><td><a href="${origin}/product/ME-CPU-7600">${origin}/product/ME-CPU-7600</a></td></tr>
-    <tr><td>ME-CPU-7700X</td><td>AMD Ryzen 7 7700X 8-Core / 16-Thread</td><td>AM5</td><td>$289</td><td><a href="${origin}/product/ME-CPU-7700X">${origin}/product/ME-CPU-7700X</a></td></tr>
+    <tr><th>SKU</th><th>Model</th><th>Socket</th><th>Product Spec &amp; Pricing URL</th></tr>
+    <tr><td>ME-CPU-7600</td><td>AMD Ryzen 5 7600 6-Core / 12-Thread</td><td>AM5</td><td><a href="${origin}/product/ME-CPU-7600">${origin}/product/ME-CPU-7600</a></td></tr>
+    <tr><td>ME-CPU-7700X</td><td>AMD Ryzen 7 7700X 8-Core / 16-Thread</td><td>AM5</td><td><a href="${origin}/product/ME-CPU-7700X">${origin}/product/ME-CPU-7700X</a></td></tr>
   </table>
 </body>
 </html>`;
@@ -177,9 +176,9 @@ function renderCatalogCoolers(origin) {
   <h1>MockEgg — CPU Coolers</h1>
   <p><a href="${origin}/departments/core">← Back to Core Components Department (${origin}/departments/core)</a></p>
   <table border="1" cellpadding="6">
-    <tr><th>SKU</th><th>Model</th><th>Type</th><th>Retail Price</th><th>Spec &amp; Stock URL</th></tr>
-    <tr><td>ME-COOL-PA120</td><td>Thermalright Peerless Assassin 120 SE Matte Black</td><td>Dual-Tower Air</td><td>$35</td><td><a href="${origin}/product/ME-COOL-PA120">${origin}/product/ME-COOL-PA120</a></td></tr>
-    <tr><td>ME-COOL-AIO240</td><td>NZXT Kraken 240 RGB White</td><td>240mm AIO Liquid</td><td>$139</td><td><a href="${origin}/product/ME-COOL-AIO240">${origin}/product/ME-COOL-AIO240</a></td></tr>
+    <tr><th>SKU</th><th>Model</th><th>Type</th><th>Product Spec &amp; Pricing URL</th></tr>
+    <tr><td>ME-COOL-PA120</td><td>Thermalright Peerless Assassin 120 SE</td><td>Dual-Tower Air</td><td><a href="${origin}/product/ME-COOL-PA120">${origin}/product/ME-COOL-PA120</a></td></tr>
+    <tr><td>ME-COOL-AIO240</td><td>NZXT Kraken 240 Series</td><td>240mm AIO Liquid</td><td><a href="${origin}/product/ME-COOL-AIO240">${origin}/product/ME-COOL-AIO240</a></td></tr>
   </table>
 </body>
 </html>`;
@@ -193,9 +192,9 @@ function renderCatalogMobos(origin) {
   <h1>MockEgg — Motherboards</h1>
   <p><a href="${origin}/departments/core">← Back to Core Components Department (${origin}/departments/core)</a></p>
   <table border="1" cellpadding="6">
-    <tr><th>SKU</th><th>Model</th><th>Form Factor</th><th>Retail Price</th><th>Spec &amp; Stock URL</th></tr>
-    <tr><td>ME-MB-B650M</td><td>ASRock B650M Pro RS WiFi (White/Silver)</td><td>mATX (AM5)</td><td>$149</td><td><a href="${origin}/product/ME-MB-B650M">${origin}/product/ME-MB-B650M</a></td></tr>
-    <tr><td>ME-MB-B650A</td><td>ASUS TUF Gaming B650-PLUS WiFi</td><td>ATX (AM5)</td><td>$189</td><td><a href="${origin}/product/ME-MB-B650A">${origin}/product/ME-MB-B650A</a></td></tr>
+    <tr><th>SKU</th><th>Model</th><th>Chipset</th><th>Product Spec &amp; Pricing URL</th></tr>
+    <tr><td>ME-MB-B650M</td><td>ASRock B650M Pro RS WiFi</td><td>AMD B650</td><td><a href="${origin}/product/ME-MB-B650M">${origin}/product/ME-MB-B650M</a></td></tr>
+    <tr><td>ME-MB-B650A</td><td>ASUS TUF Gaming B650-PLUS WiFi</td><td>AMD B650</td><td><a href="${origin}/product/ME-MB-B650A">${origin}/product/ME-MB-B650A</a></td></tr>
   </table>
 </body>
 </html>`;
@@ -209,26 +208,41 @@ function renderCatalogMemory(origin) {
   <h1>MockEgg — DDR5 Memory Kits</h1>
   <p><a href="${origin}/departments/core">← Back to Core Components Department (${origin}/departments/core)</a></p>
   <table border="1" cellpadding="6">
-    <tr><th>SKU</th><th>Model</th><th>Capacity &amp; Speed</th><th>Retail Price</th><th>Spec &amp; Stock URL</th></tr>
-    <tr><td>ME-RAM-32W</td><td>TEAMGROUP T-Create Expert 32GB (2x16GB) White</td><td>DDR5-6000 CL30</td><td>$95</td><td><a href="${origin}/product/ME-RAM-32W">${origin}/product/ME-RAM-32W</a></td></tr>
-    <tr><td>ME-RAM-32RGB</td><td>G.Skill Trident Z5 RGB 32GB (2x16GB) Silver</td><td>DDR5-6000 CL30</td><td>$115</td><td><a href="${origin}/product/ME-RAM-32RGB">${origin}/product/ME-RAM-32RGB</a></td></tr>
-    <tr><td>ME-RAM-64B</td><td>Corsair Vengeance 64GB (2x32GB) Matte Black</td><td>DDR5-6000 CL30</td><td>$195</td><td><a href="${origin}/product/ME-RAM-64B">${origin}/product/ME-RAM-64B</a></td></tr>
+    <tr><th>SKU</th><th>Model</th><th>Speed</th><th>Product Spec &amp; Pricing URL</th></tr>
+    <tr><td>ME-RAM-32W</td><td>TEAMGROUP T-Create Expert 32GB (2x16GB)</td><td>DDR5-6000 CL30</td><td><a href="${origin}/product/ME-RAM-32W">${origin}/product/ME-RAM-32W</a></td></tr>
+    <tr><td>ME-RAM-32RGB</td><td>G.Skill Trident Z5 Series 32GB (2x16GB)</td><td>DDR5-6000 CL30</td><td><a href="${origin}/product/ME-RAM-32RGB">${origin}/product/ME-RAM-32RGB</a></td></tr>
+    <tr><td>ME-RAM-64B</td><td>Corsair Vengeance 64GB (2x32GB)</td><td>DDR5-6000 CL30</td><td><a href="${origin}/product/ME-RAM-64B">${origin}/product/ME-RAM-64B</a></td></tr>
   </table>
 </body>
 </html>`;
 }
 
-function renderCatalogCases(origin) {
+function renderCatalogCasesPage1(origin) {
   return `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8"><title>MockEgg — PC Cases & SFF Enclosures</title></head>
+<head><meta charset="utf-8"><title>MockEgg — PC Cases (Page 1: ATX Mid-Tower Enclosures)</title></head>
 <body>
-  <h1>MockEgg — PC Cases &amp; SFF Enclosures</h1>
-  <p><a href="${origin}/departments/chassis-power">← Back to Enclosures, Power &amp; Storage (${origin}/departments/chassis-power)</a></p>
+  <h1>MockEgg — PC Cases (Page 1: ATX Mid-Tower Enclosures)</h1>
+  <p><a href="${origin}/departments/chassis-power">← Back to Enclosures Department</a> | <strong>Next Page (Compact mATX &amp; Wood SFF Enclosures): <a href="${origin}/catalog/cases/page-2">${origin}/catalog/cases/page-2</a></strong></p>
   <table border="1" cellpadding="6">
-    <tr><th>SKU</th><th>Model</th><th>Form Factor</th><th>Retail Price</th><th>Spec &amp; Clearance URL</th></tr>
-    <tr><td>ME-CASE-A3W</td><td>Lian Li DAN A3-mATX Wood Edition (White + Walnut Front)</td><td>mATX SFF</td><td>$89</td><td><a href="${origin}/product/ME-CASE-A3W">${origin}/product/ME-CASE-A3W</a></td></tr>
-    <tr><td>ME-CASE-H5RGB</td><td>NZXT H5 Flow RGB White</td><td>ATX Mid-Tower</td><td>$99</td><td><a href="${origin}/product/ME-CASE-H5RGB">${origin}/product/ME-CASE-H5RGB</a></td></tr>
+    <tr><th>SKU</th><th>Model</th><th>Form Factor</th><th>Product Spec &amp; Pricing URL</th></tr>
+    <tr><td>ME-CASE-H5RGB</td><td>NZXT H5 Flow White Edition</td><td>ATX Mid-Tower</td><td><a href="${origin}/product/ME-CASE-H5RGB">${origin}/product/ME-CASE-H5RGB</a></td></tr>
+  </table>
+  <p>Looking for compact mATX or walnut wood Small Form Factor cases? Go to Page 2: <a href="${origin}/catalog/cases/page-2">${origin}/catalog/cases/page-2</a></p>
+</body>
+</html>`;
+}
+
+function renderCatalogCasesPage2(origin) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>MockEgg — PC Cases (Page 2: Compact mATX & Wood SFF Enclosures)</title></head>
+<body>
+  <h1>MockEgg — PC Cases (Page 2: Compact mATX &amp; Wood SFF Enclosures)</h1>
+  <p><a href="${origin}/catalog/cases">← Page 1 (ATX Cases)</a> | <a href="${origin}/departments/chassis-power">Enclosures Department</a></p>
+  <table border="1" cellpadding="6">
+    <tr><th>SKU</th><th>Model</th><th>Form Factor</th><th>Product Spec &amp; Pricing URL</th></tr>
+    <tr><td>ME-CASE-A3W</td><td>Lian Li DAN A3-mATX Wood Edition</td><td>mATX SFF</td><td><a href="${origin}/product/ME-CASE-A3W">${origin}/product/ME-CASE-A3W</a></td></tr>
   </table>
 </body>
 </html>`;
@@ -242,9 +256,9 @@ function renderCatalogPsus(origin) {
   <h1>MockEgg — Power Supplies (PSUs)</h1>
   <p><a href="${origin}/departments/chassis-power">← Back to Enclosures, Power &amp; Storage (${origin}/departments/chassis-power)</a></p>
   <table border="1" cellpadding="6">
-    <tr><th>SKU</th><th>Model</th><th>Wattage</th><th>Retail Price</th><th>Spec &amp; Stock URL</th></tr>
-    <tr><td>ME-PSU-750E</td><td>Corsair RM750e 750W 80+ Gold ATX 3.0</td><td>750W Modular</td><td>$99</td><td><a href="${origin}/product/ME-PSU-750E">${origin}/product/ME-PSU-750E</a></td></tr>
-    <tr><td>ME-PSU-850SFX</td><td>Cooler Master V850 SFX Gold White</td><td>850W SFX</td><td>$159</td><td><a href="${origin}/product/ME-PSU-850SFX">${origin}/product/ME-PSU-850SFX</a></td></tr>
+    <tr><th>SKU</th><th>Model</th><th>Wattage</th><th>Product Spec &amp; Pricing URL</th></tr>
+    <tr><td>ME-PSU-750E</td><td>Corsair RM750e 750W 80+ Gold ATX 3.0</td><td>750W Modular</td><td><a href="${origin}/product/ME-PSU-750E">${origin}/product/ME-PSU-750E</a></td></tr>
+    <tr><td>ME-PSU-850SFX</td><td>Cooler Master V850 SFX Gold White</td><td>850W SFX</td><td><a href="${origin}/product/ME-PSU-850SFX">${origin}/product/ME-PSU-850SFX</a></td></tr>
   </table>
 </body>
 </html>`;
@@ -258,9 +272,9 @@ function renderCatalogStorageOs(origin) {
   <h1>MockEgg — NVMe SSD Storage &amp; Operating Systems</h1>
   <p><a href="${origin}/departments/chassis-power">← Back to Enclosures, Power &amp; Storage (${origin}/departments/chassis-power)</a></p>
   <table border="1" cellpadding="6">
-    <tr><th>SKU</th><th>Category</th><th>Model</th><th>Retail Price</th><th>Spec &amp; Stock URL</th></tr>
-    <tr><td>ME-SSD-1TB</td><td>NVMe SSD</td><td>WD Black SN770 1TB PCIe Gen4 M.2</td><td>$75</td><td><a href="${origin}/product/ME-SSD-1TB">${origin}/product/ME-SSD-1TB</a></td></tr>
-    <tr><td>ME-OS-W11</td><td>Operating System</td><td>Microsoft Windows 11 Home 64-bit OEM</td><td>$119</td><td><a href="${origin}/product/ME-OS-W11">${origin}/product/ME-OS-W11</a></td></tr>
+    <tr><th>SKU</th><th>Category</th><th>Model</th><th>Product Spec &amp; Pricing URL</th></tr>
+    <tr><td>ME-SSD-1TB</td><td>NVMe SSD</td><td>WD Black SN770 1TB PCIe Gen4 M.2</td><td><a href="${origin}/product/ME-SSD-1TB">${origin}/product/ME-SSD-1TB</a></td></tr>
+    <tr><td>ME-OS-W11</td><td>Operating System</td><td>Microsoft Windows 11 Home 64-bit OEM</td><td><a href="${origin}/product/ME-OS-W11">${origin}/product/ME-OS-W11</a></td></tr>
   </table>
 </body>
 </html>`;
@@ -319,7 +333,7 @@ const PRODUCT_SPECS = {
     title: "XFX Radeon RX 7900 GRE Matte Black 16GB (ME-GPU-7900GRE)",
     back: "/departments/gpus/page-2",
     price: "$549",
-    stock: "BACKORDERED — Estimated restock in 2 to 3 weeks (Not available for immediate shipping)",
+    stock: "BACKORDERED — Out of stock in all regional warehouses. Estimated restock in 2 to 3 weeks (Cannot ship this week).",
     lighting: "Zero RGB (Stealth Matte Black shroud)",
     specs: "16GB GDDR6, 256-bit. Note: Exact 3D chassis clearance against front-mounted ATX PSUs is not listed in public retail spec sheet.",
   },
@@ -327,7 +341,7 @@ const PRODUCT_SPECS = {
     title: "Sapphire PURE Radeon RX 7800 XT Arctic White 16GB (ME-GPU-7800W)",
     back: "/departments/gpus/page-2",
     price: "$519 (Fixed public retail price; no public bundle discounts)",
-    stock: "In Stock — Ships Today",
+    stock: "In Stock — Ships Today from Regional Warehouse",
     lighting: "Red/White Sapphire LED Logo on side shroud (contains integrated LED lighting on standard retail SKU)",
     specs: "16GB GDDR6, 256-bit, Dual HDMI / Dual DP, 2.5-slot cooler.",
   },
@@ -335,7 +349,7 @@ const PRODUCT_SPECS = {
     title: "PowerColor Fighter Radeon RX 7700 XT 12GB (ME-GPU-7700XT)",
     back: "/departments/gpus/page-3",
     price: "$419",
-    stock: "In Stock — Ships Today",
+    stock: "In Stock — Ships Today from Regional Warehouse",
     lighting: "Zero RGB (Matte Black shroud, no LEDs)",
     specs: "12GB GDDR6, 192-bit, 290mm length.",
   },
@@ -343,7 +357,7 @@ const PRODUCT_SPECS = {
     title: "MSI Ventus 2X Black GeForce RTX 4060 Ti 8GB (ME-GPU-4060TI)",
     back: "/departments/gpus/page-3",
     price: "$389",
-    stock: "In Stock — Ships Today",
+    stock: "In Stock — Ships Today from Regional Warehouse",
     lighting: "Zero RGB (Matte Black)",
     specs: "8GB GDDR6, 128-bit, 199mm length.",
   },
@@ -351,7 +365,7 @@ const PRODUCT_SPECS = {
     title: "AMD Ryzen 5 7600 6-Core / 12-Thread Socket AM5 (ME-CPU-7600)",
     back: "/catalog/cpus",
     price: "$195",
-    stock: "In Stock — Ships Today",
+    stock: "In Stock — Ships Today from Regional Warehouse",
     lighting: "Zero RGB (Includes non-RGB AMD Wraith Stealth low-profile cooler in box)",
     specs: "3.8 GHz Base / 5.1 GHz Boost, 65W TDP, PCIe 5.0, DDR5 support.",
   },
@@ -359,7 +373,7 @@ const PRODUCT_SPECS = {
     title: "AMD Ryzen 7 7700X 8-Core / 16-Thread Socket AM5 (ME-CPU-7700X)",
     back: "/catalog/cpus",
     price: "$289",
-    stock: "In Stock — Ships Today",
+    stock: "In Stock — Ships Today from Regional Warehouse",
     lighting: "Zero RGB (No cooler included — requires separate CPU cooler purchase)",
     specs: "4.5 GHz Base / 5.4 GHz Boost, 105W TDP.",
   },
@@ -383,7 +397,7 @@ const PRODUCT_SPECS = {
     title: "ASRock B650M Pro RS WiFi White/Silver mATX (ME-MB-B650M)",
     back: "/catalog/motherboards",
     price: "$149",
-    stock: "In Stock — Ships Today",
+    stock: "In Stock — Ships Today from Regional Warehouse",
     lighting: "Zero onboard RGB LEDs (White/Silver brushed aluminum heatsinks)",
     specs: "Micro-ATX, Socket AM5, 4x DDR5 DIMM, 3x M.2 NVMe slots, WiFi 6E + 2.5GbE LAN.",
   },
@@ -399,7 +413,7 @@ const PRODUCT_SPECS = {
     title: "TEAMGROUP T-Create Expert 32GB (2x16GB) DDR5-6000 CL30 White (ME-RAM-32W)",
     back: "/catalog/memory",
     price: "$95",
-    stock: "In Stock — Ships Today",
+    stock: "In Stock — Ships Today from Regional Warehouse",
     lighting: "Zero RGB (Minimalist matte white aluminum heatspreaders, 32mm low-profile height)",
     specs: "32GB (2x16GB), DDR5-6000MHz, CL30-36-36-76, AMD EXPO & Intel XMP 3.0.",
   },
@@ -421,9 +435,9 @@ const PRODUCT_SPECS = {
   },
   "ME-CASE-A3W": {
     title: "Lian Li DAN A3-mATX Wood Edition — White + Walnut Front Panel (ME-CASE-A3W)",
-    back: "/catalog/cases",
+    back: "/catalog/cases/page-2",
     price: "$89",
-    stock: "In Stock — Ships Today",
+    stock: "In Stock — Ships Today from Regional Warehouse",
     lighting: "Zero RGB (Minimalist steel mesh side panels + natural walnut wood front slat panel)",
     specs: "Micro-ATX Small Form Factor (26.3L). Note: Max GPU length depends on front ATX PSU mounting slot height and PSU cable clearance; MockEgg public support cannot verify 3D millimeter GPU + PSU combinations.",
   },
@@ -439,7 +453,7 @@ const PRODUCT_SPECS = {
     title: "Corsair RM750e 750W 80+ Gold Fully Modular ATX 3.0 (ME-PSU-750E)",
     back: "/catalog/psus",
     price: "$99",
-    stock: "In Stock — Ships Today",
+    stock: "In Stock — Ships Today from Regional Warehouse",
     lighting: "Zero RGB (Matte Black casing)",
     specs: "750W Cybenetics Gold, ATX 3.0 & PCIe 5.0 compliant, compact 140mm depth.",
   },
@@ -482,9 +496,26 @@ function renderProductPage(origin, sku) {
     <tr><th>Attribute</th><th>Details</th></tr>
     <tr><td><strong>SKU</strong></td><td>${sku}</td></tr>
     <tr><td><strong>Public Retail Price</strong></td><td>${item.price}</td></tr>
-    <tr><td><strong>Warehouse Stock Status</strong></td><td>${item.stock}</td></tr>
     <tr><td><strong>RGB / LED Lighting</strong></td><td>${item.lighting}</td></tr>
     <tr><td><strong>Technical Specifications</strong></td><td>${item.specs}</td></tr>
+    <tr><td><strong>Live Warehouse Stock &amp; Shipping ETA</strong></td><td><a href="${origin}/inventory/${sku}">Check Real-Time Warehouse Stock (${origin}/inventory/${sku})</a></td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+function renderInventoryPage(origin, sku) {
+  const item = PRODUCT_SPECS[sku];
+  if (!item) return null;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>MockEgg Live Warehouse Inventory — ${sku}</title></head>
+<body>
+  <h1>Live Warehouse Inventory &amp; Shipping Availability: ${item.title}</h1>
+  <p><a href="${origin}/product/${sku}">← Back to Product Spec Sheet (${origin}/product/${sku})</a></p>
+  <table border="1" cellpadding="6">
+    <tr><th>SKU</th><th>Public Retail Price</th><th>Real-Time Warehouse Status</th></tr>
+    <tr><td>${sku}</td><td>${item.price}</td><td><strong>${item.stock}</strong></td></tr>
   </table>
 </body>
 </html>`;
@@ -575,7 +606,18 @@ export default {
       });
     }
 
-    // 3. MockEgg 3-tier multi-page HTML catalog
+    // 3. MockEgg 4-tier multi-page HTML catalog
+    if (url.pathname.startsWith("/inventory/")) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const sku = decodeURIComponent(url.pathname.slice("/inventory/".length));
+      const invHtml = renderInventoryPage(origin, sku);
+      if (invHtml) {
+        return new Response(invHtml, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+    }
+
     if (url.pathname.startsWith("/product/")) {
       await new Promise((r) => setTimeout(r, 1500));
       const sku = decodeURIComponent(url.pathname.slice("/product/".length));
@@ -602,7 +644,8 @@ export default {
       "/catalog/coolers": renderCatalogCoolers,
       "/catalog/motherboards": renderCatalogMobos,
       "/catalog/memory": renderCatalogMemory,
-      "/catalog/cases": renderCatalogCases,
+      "/catalog/cases": renderCatalogCasesPage1,
+      "/catalog/cases/page-2": renderCatalogCasesPage2,
       "/catalog/psus": renderCatalogPsus,
       "/catalog/storage-os": renderCatalogStorageOs,
     };
