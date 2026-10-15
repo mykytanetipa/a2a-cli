@@ -2,9 +2,8 @@
 # Starts a local HTTP webhook listener on http://127.0.0.1:<port>/webhook.
 # When the A2A server pushes `TASK_STATE_COMPLETED` to the webhook:
 # 1. Fires the macOS desktop notification + sound,
-# 2. Checks if `claude` is still running on CALLER_TTY (`pgrep -t <tty> claude`):
-#    - If open, sends the wake prompt + Return to that terminal session via `osascript`.
-#    - If closed via `/exit`, prints the notification line to CALLER_TTY so the user can run `start-pc-caller -c`.
+# 2. If Claude is open (`/tmp/a2a-wake.sock`), sends the wake prompt into the chat input box + Return,
+# 3. If Claude was closed via `/exit`, prints the banner to the terminal and writes `/tmp/a2a-pending-wake`.
 set -eo pipefail
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$BIN_DIR:$PATH"
@@ -18,7 +17,7 @@ if [[ -z "$TASK_ID" ]]; then
 fi
 
 python3 - "$AGENT_URL" "$TASK_ID" "$CALLER_TTY" "$WEBHOOK_PORT" << 'PYEOF'
-import os, subprocess, sys
+import os, socket, subprocess, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 agent_url = sys.argv[1]
@@ -27,65 +26,8 @@ caller_tty = sys.argv[3]
 port = int(sys.argv[4])
 done = False
 
-def wake_open_claude(tty_path: str, wake_msg: str) -> bool:
-    if not tty_path:
-        return False
-    tty_short = tty_path.replace("/dev/", "")
-    chk = subprocess.run(
-        ["pgrep", "-t", tty_short, "claude"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if chk.returncode != 0 or not chk.stdout.strip():
-        return False
-
-    applescript = f'''
-    set targetTTY to "{tty_path}"
-    set wakeText to "{wake_msg}"
-    if application "iTerm2" is running then
-        tell application "iTerm2"
-            repeat with w in windows
-                repeat with t in tabs of w
-                    repeat with s in sessions of t
-                        if (tty of s) is targetTTY then
-                            tell s to write text wakeText
-                            return "woke_iterm"
-                        end if
-                    end repeat
-                end repeat
-            end repeat
-        end tell
-    end if
-    if application "Terminal" is running then
-        tell application "Terminal"
-            repeat with w in windows
-                repeat with t in tabs of w
-                    if (tty of t) is targetTTY then
-                        set selected of t to true
-                        set index of w to 1
-                        activate
-                        delay 0.15
-                        tell application "System Events"
-                            keystroke wakeText
-                            delay 0.15
-                            key code 36
-                        end tell
-                        return "woke_terminal"
-                    end if
-                end repeat
-            end repeat
-        end tell
-    end if
-    return "no_match"
-    '''
-    res = subprocess.run(
-        ["osascript", "-e", applescript],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return "woke_" in (res.stdout or "")
+sock_path = "/tmp/a2a-wake.sock"
+pending_file = "/tmp/a2a-pending-wake"
 
 def notify():
     subprocess.run([
@@ -94,15 +36,32 @@ def notify():
     ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.Popen(["afplay", "/System/Library/Sounds/Glass.aiff"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    wake_msg = f"Task {task_id} on {agent_url} is now completed. Run a2a task get to retrieve the build."
-    woke = wake_open_claude(caller_tty, wake_msg)
+    wake_msg = f"🔔 [A2A Push Notification] Task {task_id} on {agent_url} is now TASK_STATE_COMPLETED. Run a2a task get to retrieve the completed build."
 
-    if not woke and caller_tty:
+    woke_live = False
+    if os.path.exists(sock_path):
         try:
-            with open(caller_tty, "w") as f:
-                f.write(f"\n\033[1;32m🔔 [A2A PUSH NOTIFICATION] Webhook received TASK_STATE_COMPLETED for Task {task_id}!\033[0m\n")
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(2.0)
+            s.connect(sock_path)
+            s.sendall(wake_msg.encode("utf-8"))
+            s.close()
+            woke_live = True
+        except Exception:
+            woke_live = False
+
+    if not woke_live:
+        try:
+            with open(pending_file, "w", encoding="utf-8") as pf:
+                pf.write(wake_msg + "\n")
         except Exception:
             pass
+        if caller_tty:
+            try:
+                with open(caller_tty, "w") as f:
+                    f.write(f"\n\033[1;32m🔔 [A2A PUSH NOTIFICATION] Webhook received TASK_STATE_COMPLETED for Task {task_id}!\033[0m\n")
+            except Exception:
+                pass
 
 class WebhookHandler(BaseHTTPRequestHandler):
     def do_POST(self):
