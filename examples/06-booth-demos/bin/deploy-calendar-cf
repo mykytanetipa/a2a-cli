@@ -6,28 +6,22 @@ WORKER_DIR="$DEMO_DIR/calendar-worker"
 echo "📦 Installing @a2a-js/sdk in calendar-worker..."
 npm --prefix "$WORKER_DIR" install --no-audit --no-fund
 
-if ! npx --yes wrangler whoami >/dev/null 2>&1; then
+WHOAMI_OUT="$(npx --yes wrangler whoami 2>&1 || true)"
+if echo "$WHOAMI_OUT" | grep -Eqi "not authenticated|login|error"; then
   echo "🔐 Logging in to Cloudflare Wrangler (opening browser)..."
   npx --yes wrangler login
 fi
 
 echo "🚀 Deploying vp-schedule-bot (VP Yaroslav's @a2a-js/sdk A2A Agent)..."
-OUT1=$(npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name vp-schedule-bot 2>&1 | tee /dev/stderr)
-VP_URL=$(echo "$OUT1" | grep -Eo 'https://vp-schedule-bot\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 || true)
+npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name vp-schedule-bot
 
 echo ""
 echo "🚀 Deploying alex-schedule-bot (Director Alex's @a2a-js/sdk A2A Agent)..."
-OUT2=$(npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name alex-schedule-bot 2>&1 | tee /dev/stderr)
-ALEX_URL=$(echo "$OUT2" | grep -Eo 'https://alex-schedule-bot\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 || true)
+npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name alex-schedule-bot
 
-SUBDOMAIN="booth-demos"
-if [[ -n "$VP_URL" ]]; then
-  SUBDOMAIN=$(echo "$VP_URL" | sed -E 's#https://vp-schedule-bot\.([^.]+)\.workers\.dev#\1#')
-  echo "$SUBDOMAIN" > "$DEMO_DIR/.cf-subdomain"
-fi
-
-VP_URL="${VP_URL:-https://vp-schedule-bot.${SUBDOMAIN}.workers.dev}"
-ALEX_URL="${ALEX_URL:-https://alex-schedule-bot.${SUBDOMAIN}.workers.dev}"
+SUBDOMAIN="$(cat "$DEMO_DIR/.cf-subdomain" 2>/dev/null || echo "booth-demos")"
+VP_URL="https://vp-schedule-bot.${SUBDOMAIN}.workers.dev"
+ALEX_URL="https://alex-schedule-bot.${SUBDOMAIN}.workers.dev"
 
 cat > "$WORKER_DIR/.deployed-urls.env" << EOF
 VP_AGENT_URL="${VP_URL}"
