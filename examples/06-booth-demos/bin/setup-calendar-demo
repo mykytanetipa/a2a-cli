@@ -81,5 +81,5 @@ echo "  Window 1 (Caller WITHOUT A2A):        ./examples/06-booth-demos/bin/star
 echo "  Window 2 (Caller WITH A2A):           ./examples/06-booth-demos/bin/start-calendar-caller"
 echo ""
 echo "Prompt to paste into Window 1 & Window 2:"
-echo "  Schedule a 30-minute 1:1 with my VP this week"
+echo "  Schedule a 30-minute 1:1 with my VP next week"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

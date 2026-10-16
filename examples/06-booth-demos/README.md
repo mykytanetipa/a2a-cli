@@ -85,7 +85,7 @@ Automatically checks/installs missing prerequisites (`go`, `node`, `python3`, `o
 
 ### 3. Live Prompt (Paste into Window 1 & Window 2)
 ```text
-Schedule a 30-minute 1:1 with my VP this week
+Schedule a 30-minute 1:1 with my VP next week
 ```
 
 * **Window 1 (`Without A2A`):** Runs `corp-directory vp` (`403 FORBIDDEN`), checks `my-calendar`, and escalates by sending an email (`send-email ea-yaroslav@0-a.org`) with your open slots, waiting on a human reply.
