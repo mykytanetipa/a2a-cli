@@ -14,6 +14,8 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "🚀 Setting up Demo 2: 3-Way Executive Calendar Scheduling"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+export HOMEBREW_NO_AUTO_UPDATE=1
+
 ensure_brew() {
   if ! command -v brew >/dev/null 2>&1; then
     echo "📦 Installing Homebrew..."
@@ -34,7 +36,7 @@ fi
 if ! command -v openssl >/dev/null 2>&1; then
   ensure_brew && echo "📦 Installing OpenSSL..." && brew install openssl
 fi
-if ! command -v cloudflared >/dev/null 2>&1; then
+if ! command -v cloudflared >/dev/null 2>&1 && [[ ! -x /tmp/cloudflared ]]; then
   ensure_brew && echo "📦 Installing cloudflared..." && brew install cloudflared
 fi
 if ! command -v gcloud >/dev/null 2>&1; then
@@ -56,7 +58,7 @@ echo "   ✅ All Demo 2 CLI prerequisites installed."
 
 echo ""
 echo "🔨 Step 2/4: Building a2a CLI binary..."
-(cd "$REPO_ROOT" && go build -o "$BIN_DIR/a2a" ./cmd/a2a)
+(cd "$REPO_ROOT" && go build -o "$BIN_DIR/a2a" .)
 echo "   ✅ Built $BIN_DIR/a2a"
 
 echo ""

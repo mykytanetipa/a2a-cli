@@ -13,6 +13,8 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "🚀 Setting up Demo 1: Custom Gaming PC Build (MockEgg vs. RigFoundry)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+export HOMEBREW_NO_AUTO_UPDATE=1
+
 ensure_brew() {
   if ! command -v brew >/dev/null 2>&1; then
     echo "📦 Installing Homebrew..."
@@ -30,7 +32,7 @@ fi
 if ! command -v python3 >/dev/null 2>&1; then
   ensure_brew && echo "📦 Installing Python 3..." && brew install python
 fi
-if ! command -v cloudflared >/dev/null 2>&1; then
+if ! command -v cloudflared >/dev/null 2>&1 && [[ ! -x /tmp/cloudflared ]]; then
   ensure_brew && echo "📦 Installing cloudflared..." && brew install cloudflared
 fi
 
@@ -49,7 +51,7 @@ echo "   ✅ All Demo 1 CLI prerequisites installed."
 
 echo ""
 echo "🔨 Step 2/3: Building a2a CLI binary..."
-(cd "$REPO_ROOT" && go build -o "$BIN_DIR/a2a" ./cmd/a2a)
+(cd "$REPO_ROOT" && go build -o "$BIN_DIR/a2a" .)
 echo "   ✅ Built $BIN_DIR/a2a"
 
 echo ""
