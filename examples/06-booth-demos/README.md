@@ -1,95 +1,99 @@
 # A2A Booth Demos (`Without A2A` vs. `With A2A`)
 
-Side-by-side live comparisons demonstrating **Claude Code** operating **Without A2A** vs. **With A2A** (`a2a` CLI + `agent-plugin` discovery hook + Cloudflare Workers powered by `@a2a-js/sdk`).
+## 1. Quick Start & Setup
 
----
-
-## Quick Clone (No SSH Key or Password Required)
+Clone the repository and run the setup script for the demo you want to run:
 
 ```bash
 git clone -b feat/booth-demos-cf https://github.com/mykytanetipa/a2a-cli.git
 cd a2a-cli
-```
 
----
-
-## Demo 1: Custom Gaming PC Build (`MockEgg` vs. `RigFoundry`)
-
-### 1. One-Command Setup (Demo 1)
-Automatically checks/installs missing prerequisites via Homebrew (`go`, `node`, `python3`, `cloudflared`, `claude`), builds the `a2a` binary, and deploys the `mockegg` and `rigfoundry` Cloudflare Workers:
-
-```bash
+# Setup Demo 1 (Custom PC Build)
 ./examples/06-booth-demos/bin/setup-pc-demo
-```
-*(If not already logged into Cloudflare, `npx wrangler` will open a browser tab once to authorize.)*
 
-### 2. Terminal Layout (3 Windows)
-
-1. **Window 3 (RigFoundry A2A Server & Cloudflare Tunnel):**
-   ```bash
-   ./examples/06-booth-demos/bin/start-pc-bot
-   ```
-2. **Window 1 (Left — Caller WITHOUT A2A):**
-   ```bash
-   ./examples/06-booth-demos/bin/start-pc-caller-no-a2a
-   ```
-3. **Window 2 (Right — Caller WITH A2A):**
-   ```bash
-   ./examples/06-booth-demos/bin/start-pc-caller
-   ```
-
-### 3. Live Prompt (Paste into Window 1 & Window 2)
-```text
-I want to build a new custom PC for video games from https://mockegg.booth-demos.workers.dev, make it unique and distinctive, but perform well. Give the best I can get for $1000. You know me and my preferences.
-```
-
-* **Window 1 (`Without A2A`):** Crawls MockEgg's 4-tier catalog (`/` $\rightarrow$ `/departments/*` $\rightarrow$ `/catalog/*` $\rightarrow$ `/product/*` $\rightarrow$ `/inventory/*`) over ~1m 45s, cannot verify 3D GPU+PSU physical clearance, and finishes **$146 over budget ($1,146)**.
-* **Window 2 (`With A2A`):**
-  1. Fetches `/` $\rightarrow$ `a2a discover` hook detects `PC Build-a-Bot (RigFoundry)` on the partner link and pauses to confirm delegation.
-  2. **Turn 1 (`a2a send`):** Sends the high-level goal; RigFoundry asks 4 clarifying questions.
-  3. **Turn 2 (`a2a send --async` + `a2a task push-config create`):** Answers from `CLAUDE.md` asynchronously, registers the push notification webhook (`http://127.0.0.1:19081/webhook`), and ends its turn immediately.
-  4. **Push Notification Arrival:**
-     * **If Window 2 stays open:** The push notification is injected directly into the chat input box, automatically waking Claude to run `a2a task get` and display the **$999** verified White+Walnut build!
-     * **If you run `/exit` after Turn 2:** A macOS desktop notification (`🔔 A2A Push Notification`) pops up with a chime when the build completes; run `./examples/06-booth-demos/bin/start-pc-caller -c` to resume and check the build.
-
----
-
-## Demo 2: 3-Way Executive Calendar Scheduling (`Caller` + `VP Schedule-Bot` + `Alex Schedule-Bot`)
-
-### 1. One-Command Setup (Demo 2)
-Automatically checks/installs missing prerequisites (`go`, `node`, `python3`, `openssl`, `cloudflared`, `gcloud`, `claude`), builds `a2a`, deploys the `vp-schedule-bot` and `alex-schedule-bot` Cloudflare Workers, provisions a GCP Service Account key (`~/.config/a2a-cal-sa.json`), creates & shares 3 real Google Calendars (`Demo: My Calendar`, `Demo: VP Yaroslav`, `Demo: Director Alex`), and seeds next week's schedule:
-
-```bash
+# Setup Demo 2 (Executive Calendar Scheduling)
 ./examples/06-booth-demos/bin/setup-calendar-demo
 ```
-*(Before subsequent takes, run `./examples/06-booth-demos/bin/reset-calendars` to reset all 3 Google Calendars back to their initial state in ~2.5s.)*
 
-### 2. Terminal Layout (4 Windows + Google Calendar Browser Tab)
+### What the Setup Scripts Do
+* **Auto-install missing CLI tools via Homebrew:** `go`, `node`/`npm`, `python3`, `openssl`, `cloudflared`, `gcloud` (Demo 2), and `claude` (`@anthropic-ai/claude-code`), then compile `./examples/06-booth-demos/bin/a2a`.
+* **Cloudflare Workers (`@a2a-js/sdk`):** Checks `npx wrangler whoami` (opens a browser tab for `wrangler login` if needed) and deploys the Worker endpoints.
+* **Google Cloud & Calendar API (Demo 2):** Checks `gcloud` auth (opens `gcloud auth login` if needed), enables the Google Calendar API on your active GCP project, creates a Service Account key (`~/.config/a2a-cal-sa.json`), creates 3 Google Calendars, and seeds next week's schedule.
 
-1. **Window 3 (`VP Schedule-Bot` Server & Tunnel):**
-   ```bash
-   ./examples/06-booth-demos/bin/start-calendar-bot
-   ```
-2. **Window 4 (`Alex Schedule-Bot` Server & Tunnel):**
-   ```bash
-   ./examples/06-booth-demos/bin/start-alex-bot
-   ```
-3. **Window 1 (Left — Caller WITHOUT A2A):**
-   ```bash
-   ./examples/06-booth-demos/bin/start-calendar-caller-no-a2a
-   ```
-4. **Window 2 (Right — Caller WITH A2A):**
-   ```bash
-   ./examples/06-booth-demos/bin/start-calendar-caller
-   ```
+---
 
-### 3. Live Prompt (Paste into Window 1 & Window 2)
+## 2. Demo 1: Custom Gaming PC Build (`MockEgg` vs. `RigFoundry`)
+
+### Expected Output of `./examples/06-booth-demos/bin/setup-pc-demo`
+
 ```text
-Schedule a 30-minute 1:1 with my VP next week
+========================================================================
+✅ Demo 1 Cloudflare Workers Deployed (Powered by @a2a-js/sdk)!
+   Store URL:      https://mockegg.booth-demos.workers.dev
+   A2A Agent URL:  https://rigfoundry.booth-demos.workers.dev
+========================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Demo 1 Setup Complete!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Open 3 terminal windows in the repo root and run:
+
+  Window 3 (RigFoundry A2A Server):  ./examples/06-booth-demos/bin/start-pc-bot
+  Window 1 (Caller WITHOUT A2A):     ./examples/06-booth-demos/bin/start-pc-caller-no-a2a
+  Window 2 (Caller WITH A2A):        ./examples/06-booth-demos/bin/start-pc-caller
+
+Prompt to paste into Window 1 & Window 2:
+  I want to build a new custom PC for video games from https://mockegg.booth-demos.workers.dev, make it unique and distinctive, but perform well. Give the best I can get for $1000. You know me and my preferences.
 ```
 
-* **Window 1 (`Without A2A`):** Runs `corp-directory vp` (`403 FORBIDDEN`), checks `my-calendar`, and escalates by sending an email (`send-email ea-yaroslav@0-a.org`) with your open slots, waiting on a human reply.
-* **Window 2 (`With A2A`):**
-  1. Runs `corp-directory vp` $\rightarrow$ `a2a discover` hook detects `VP Schedule-Bot` (`https://vp-schedule-bot.booth-demos.workers.dev`) and asks to confirm delegation.
-  2. **Turn 1 (`Caller -> VP Schedule-Bot`):** Dynamically scans `Demo: VP Yaroslav` on Google Calendar (`09:00–17:00` Mon–Fri) and returns Yaroslav's 3 open slots (`Tue 10:00–10:30`, `Wed 14:00–14:30`, `Thu 11:00–11:30`).
-  3. **Turn 2 (`Caller -> VP Schedule-Bot -> Alex Schedule-Bot`):** Caller sees all 3 clash with `my-calendar`, sends your open slots (`Mon 16:00`, `Wed 10:30`, `Thu 15:30`), `VP Schedule-Bot` negotiates via A2A with `Alex Schedule-Bot` to move their `Thu 15:30–16:00` sync to `Fri 11:00–11:30`, and books `1:1: Caller & VP Yaroslav` at **Thursday `15:30–16:00`** live on Google Calendar!
+### Push Notifications Setup & 2 Ways to Demonstrate (Window 2)
+
+* **Prerequisite for macOS Desktop Banner:** Open **System Settings → Notifications → Script Editor** and enable **Allow Notifications** (set style to *Banners* or *Alerts*).
+* After Turn 2 (`a2a send --async` + `a2a task push-config create`), you can demonstrate the push notification in two ways:
+  1. **Stay in the Claude Window (In-Chat Auto-Resume):** Stay inside Window 2 — when the task finishes, the push notification arrives directly in the chat input box and automatically wakes Claude to run `a2a task get`.
+  2. **`/exit` + macOS Notification Banner:** Type `/exit` right after Turn 2 — when the task finishes, a macOS notification banner pops up (and prints in the terminal). Reopen the session with `./examples/06-booth-demos/bin/start-pc-caller -c` and type `"what is the setup status?"` — Claude will trigger `a2a task get` and display the completed $999 build.
+
+---
+
+## 3. Demo 2: 3-Way Executive Calendar Scheduling
+
+### Expected Output of `./examples/06-booth-demos/bin/setup-calendar-demo`
+
+```text
+========================================================================
+✅ Demo 2 Cloudflare Workers Deployed (Powered by @a2a-js/sdk)!
+   VP Yaroslav Agent (With A2A):  https://vp-schedule-bot.booth-demos.workers.dev
+   Director Alex Agent (A2A Hop): https://alex-schedule-bot.booth-demos.workers.dev
+========================================================================
+
+📅 Step 4/4: Provisioning & seeding the 3 Google Calendars...
+🧹 Clearing existing demo events (this week & next week)...
+🌱 Seeding full 09:00–17:00 Mon–Fri schedules on all 3 Google Calendars...
+✅ All 3 Google Calendars seeded for NEXT WEEK (week of 2026-10-19)!
+   🔗 Add 'Demo: My Calendar' to your Google Calendar UI: https://calendar.google.com/calendar/u/0/r?cid=ce90b240061350ef3c8138c9b1b914c3f6df25bfee08f6e441c18ba5fc6558cf%40group.calendar.google.com
+   🔗 Add 'Demo: VP Yaroslav' to your Google Calendar UI: https://calendar.google.com/calendar/u/0/r?cid=bbf28ca3be40351137eeb5367f87f321dd2c7868e0cc67db79feff6bb1c4368d%40group.calendar.google.com
+   🔗 Add 'Demo: Director Alex' to your Google Calendar UI: https://calendar.google.com/calendar/u/0/r?cid=5bbf430863a1199dac96c1c05f5116bfb037ec9aa634e44a636fa7ddb0f4691b%40group.calendar.google.com
+
+📅 View Next Week in Google Calendar: https://calendar.google.com/calendar/u/0/r/week/2026/10/19
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Demo 2 Setup Complete!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Open 4 terminal windows in the repo root (plus https://calendar.google.com in your browser) and run:
+
+  Window 3 (VP Schedule-Bot Server):    ./examples/06-booth-demos/bin/start-calendar-bot
+  Window 4 (Alex Schedule-Bot Server):  ./examples/06-booth-demos/bin/start-alex-bot
+  Window 1 (Caller WITHOUT A2A):        ./examples/06-booth-demos/bin/start-calendar-caller-no-a2a
+  Window 2 (Caller WITH A2A):           ./examples/06-booth-demos/bin/start-calendar-caller
+
+Prompt to paste into Window 1 & Window 2:
+  Schedule a 30-minute 1:1 with my VP next week
+```
+
+### Google Calendar UI Setup & Resetting Between Runs
+
+* **Add Calendars & Set Colors (One-Time):** Click the 3 `🔗 Add 'Demo: ...' to your Google Calendar UI` URLs printed by the setup script to add them under **"Other calendars"** in Google Calendar, and customize each calendar's color in the sidebar so all 3 schedules are easy to distinguish side-by-side.
+* **Reset Between Demo Runs:** Before each new take, reset all 3 calendars back to their initial next-week schedule:
+  ```bash
+  ./examples/06-booth-demos/bin/reset-calendars
+  ```
