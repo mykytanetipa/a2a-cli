@@ -6,6 +6,11 @@ WORKER_DIR="$DEMO_DIR/calendar-worker"
 echo "📦 Installing @a2a-js/sdk in calendar-worker..."
 npm --prefix "$WORKER_DIR" install --no-audit --no-fund
 
+if ! npx --yes wrangler whoami >/dev/null 2>&1; then
+  echo "🔐 Logging in to Cloudflare Wrangler (opening browser)..."
+  npx --yes wrangler login
+fi
+
 echo "🚀 Deploying vp-schedule-bot (VP Yaroslav's @a2a-js/sdk A2A Agent)..."
 OUT1=$(npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name vp-schedule-bot 2>&1 | tee /dev/stderr)
 VP_URL=$(echo "$OUT1" | grep -Eo 'https://vp-schedule-bot\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 || true)
@@ -15,11 +20,6 @@ echo "🚀 Deploying alex-schedule-bot (Director Alex's @a2a-js/sdk A2A Agent)..
 OUT2=$(npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name alex-schedule-bot 2>&1 | tee /dev/stderr)
 ALEX_URL=$(echo "$OUT2" | grep -Eo 'https://alex-schedule-bot\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 || true)
 
-echo ""
-echo "🚀 Deploying vp-sarah (Sarah Chen Profile — NO A2A Card -> 404)..."
-OUT3=$(npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name vp-sarah 2>&1 | tee /dev/stderr)
-SARAH_URL=$(echo "$OUT3" | grep -Eo 'https://vp-sarah\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 || true)
-
 SUBDOMAIN="booth-demos"
 if [[ -n "$VP_URL" ]]; then
   SUBDOMAIN=$(echo "$VP_URL" | sed -E 's#https://vp-schedule-bot\.([^.]+)\.workers\.dev#\1#')
@@ -28,12 +28,10 @@ fi
 
 VP_URL="${VP_URL:-https://vp-schedule-bot.${SUBDOMAIN}.workers.dev}"
 ALEX_URL="${ALEX_URL:-https://alex-schedule-bot.${SUBDOMAIN}.workers.dev}"
-SARAH_URL="${SARAH_URL:-https://vp-sarah.${SUBDOMAIN}.workers.dev}"
 
 cat > "$WORKER_DIR/.deployed-urls.env" << EOF
 VP_AGENT_URL="${VP_URL}"
 ALEX_AGENT_URL="${ALEX_URL}"
-SARAH_PROFILE_URL="${SARAH_URL}"
 EOF
 
 echo ""
@@ -41,5 +39,4 @@ echo "========================================================================"
 echo "✅ Demo 2 Cloudflare Workers Deployed (Powered by @a2a-js/sdk)!"
 echo "   VP Yaroslav Agent (With A2A):  ${VP_URL}"
 echo "   Director Alex Agent (A2A Hop): ${ALEX_URL}"
-echo "   VP Sarah Profile (No A2A):     ${SARAH_URL}"
 echo "========================================================================"

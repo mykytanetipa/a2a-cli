@@ -6,6 +6,11 @@ WORKER_DIR="$DEMO_DIR/pc-worker"
 echo "📦 Installing @a2a-js/sdk in pc-worker..."
 npm --prefix "$WORKER_DIR" install --no-audit --no-fund
 
+if ! npx --yes wrangler whoami >/dev/null 2>&1; then
+  echo "🔐 Logging in to Cloudflare Wrangler (opening browser)..."
+  npx --yes wrangler login
+fi
+
 echo "🚀 Deploying mockegg (Public Multi-Page HTML Store — NO A2A Card)..."
 OUT1=$(npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name mockegg 2>&1 | tee /dev/stderr)
 MOCKEGG_URL=$(echo "$OUT1" | grep -Eo 'https://mockegg\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 || true)
@@ -15,14 +20,25 @@ echo "🚀 Deploying rigfoundry (Full @a2a-js/sdk A2A Server & Client Worker)...
 OUT2=$(npx --yes wrangler deploy --config "$WORKER_DIR/wrangler.toml" --name rigfoundry 2>&1 | tee /dev/stderr)
 RIGFOUNDRY_URL=$(echo "$OUT2" | grep -Eo 'https://rigfoundry\.[a-zA-Z0-9_-]+\.workers\.dev' | head -n 1 || true)
 
-SUBDOMAIN=$(echo "$RIGFOUNDRY_URL" | sed -E 's#https://rigfoundry\.([^.]+)\.workers\.dev#\1#' || true)
-if [[ -n "$SUBDOMAIN" && "$SUBDOMAIN" != "$RIGFOUNDRY_URL" ]]; then
-  echo "$SUBDOMAIN" > "$DEMO_DIR/.cf-subdomain"
+SUBDOMAIN="booth-demos"
+if [[ -n "$RIGFOUNDRY_URL" ]]; then
+  SUBDOMAIN=$(echo "$RIGFOUNDRY_URL" | sed -E 's#https://rigfoundry\.([^.]+)\.workers\.dev#\1#' || true)
+  if [[ -n "$SUBDOMAIN" && "$SUBDOMAIN" != "$RIGFOUNDRY_URL" ]]; then
+    echo "$SUBDOMAIN" > "$DEMO_DIR/.cf-subdomain"
+  fi
 fi
+
+MOCKEGG_URL="${MOCKEGG_URL:-https://mockegg.${SUBDOMAIN}.workers.dev}"
+RIGFOUNDRY_URL="${RIGFOUNDRY_URL:-https://rigfoundry.${SUBDOMAIN}.workers.dev}"
+
+cat > "$WORKER_DIR/.deployed-urls.env" << EOF
+MOCKEGG_URL="${MOCKEGG_URL}"
+RIGFOUNDRY_URL="${RIGFOUNDRY_URL}"
+EOF
 
 echo ""
 echo "========================================================================"
 echo "✅ Demo 1 Cloudflare Workers Deployed (Powered by @a2a-js/sdk)!"
-echo "   Store URL:      ${MOCKEGG_URL:-https://mockegg.<your-subdomain>.workers.dev}"
-echo "   A2A Agent URL:  ${RIGFOUNDRY_URL:-https://rigfoundry.<your-subdomain>.workers.dev}"
+echo "   Store URL:      ${MOCKEGG_URL}"
+echo "   A2A Agent URL:  ${RIGFOUNDRY_URL}"
 echo "========================================================================"
