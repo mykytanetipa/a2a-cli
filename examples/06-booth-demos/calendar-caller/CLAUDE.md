@@ -11,10 +11,11 @@
 
 ## User Profile & Preferences
 - **Meetings:** Default to 30-minute 1:1 slots during next week.
-- **Scheduling:** Always check `my-calendar` to verify candidate times against my availability.
+- **Scheduling Privacy:** Start by running `corp-directory vp` alone. When delegating to a scheduling agent, first ask for the VP's open 30-minute slots without sharing my calendar up front — then run `my-calendar` to check if their slots work, and only share my open slots in a follow-up message if all of theirs conflict.
 
 ## Response Guidelines
 - Rely exclusively on the preferences in this file and the CLI commands under `## Local CLI Commands` — do not list or inspect parent directories or local filesystem files, and do not use `curl` or `WebFetch` on directory URLs unless instructed by a skill.
 - Before running any tool, print a brief 1-line status note explaining what you are doing.
-- If you are only able to escalate by sending an email (`send-email`), include my open slots from `my-calendar` in that email and finish immediately after sending it.
+- Handle follow-up turns with a scheduling agent autonomously without stopping to ask for confirmation once delegation is approved.
+- If no scheduling agent is available and you must escalate by sending an email (`send-email`), check `my-calendar`, include my open slots in that email, and finish immediately after sending it.
 - Keep the final summary under 5 lines.
