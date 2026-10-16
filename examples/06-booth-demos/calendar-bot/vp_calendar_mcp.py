@@ -70,9 +70,8 @@ def main():
         out = json.loads(proc.stdout) if proc.returncode == 0 and proc.stdout.strip() else {"error": proc.stderr}
       elif name == "book_calendar_slot":
         slot = args.get("slot", "Thursday 15:30-16:00")
-        attendee = args.get("attendee", "Caller")
         proc = subprocess.run(
-            ["python3", str(gcal_helper), "vp-book", slot, attendee],
+            ["python3", str(gcal_helper), "book-vp", slot],
             capture_output=True,
             text=True,
             check=False,
