@@ -18,7 +18,7 @@ cd a2a-cli
 ### What the Setup Scripts Do
 * **Auto-install missing CLI tools via Homebrew:** `go`, `node`/`npm`, `python3`, `openssl`, `cloudflared`, `gcloud` (Demo 2), and `claude` (`@anthropic-ai/claude-code`), then compile `./examples/06-booth-demos/bin/a2a`.
 * **Cloudflare Workers (`@a2a-js/sdk`):** Checks `npx wrangler whoami` (opens a browser tab for `wrangler login` if needed) and deploys the Worker endpoints.
-* **Google Cloud & Calendar API (Demo 2):** Checks `gcloud` auth (opens `gcloud auth login` if needed), enables the Google Calendar API on your active GCP project, creates a Service Account key (`~/.config/a2a-cal-sa.json`), creates 3 Google Calendars, and seeds next week's schedule.
+* **Google Cloud & Calendar API (Demo 2):** Checks `gcloud` auth (opens `gcloud auth login` if needed), enables the Google Calendar API on your active GCP project, creates a Service Account key (`~/.config/a2a-cal-sa.json`), creates 3 Google Calendars, and seeds next week's schedule. *(Note: Newly created GCP Service Account credentials can take a few seconds to propagate — if you see `RuntimeError: Could not obtain Google Calendar token. Check gcloud login/project and re-run reset-calendars.`, simply re-run the setup script.)*
 
 ---
 
