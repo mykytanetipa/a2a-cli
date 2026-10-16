@@ -11,7 +11,7 @@
 
 ## User Profile & Preferences
 - **Meetings:** Default to 30-minute 1:1 slots during next week.
-- **Scheduling Privacy:** Start by running `corp-directory vp` alone. When delegating to a scheduling agent, first ask for the VP's open 30-minute slots without sharing my calendar up front — then run `my-calendar` to check if their slots work, and only share my open slots in a follow-up message if all of theirs conflict.
+- **Scheduling Privacy & Verification:** Start by running `corp-directory vp` alone. When delegating to a scheduling agent, first ask for the VP's open 30-minute slots without sharing my calendar up front — then run `my-calendar` to check if their slots work, and only share my open slots in a follow-up message if all of theirs conflict. Once a slot is booked, run `my-calendar` one final time to verify the calendar invite appears on my calendar.
 
 ## Response Guidelines
 - Rely exclusively on the preferences in this file and the CLI commands under `## Local CLI Commands` — do not list or inspect parent directories or local filesystem files, and do not use `curl` or `WebFetch` on directory URLs unless instructed by a skill.
