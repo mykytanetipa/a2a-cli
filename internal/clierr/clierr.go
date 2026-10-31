@@ -44,6 +44,12 @@ const (
 	CodeCardInvalid = "A2ACLI_ERR_CARD_INVALID"
 	// CodeTimeout marks a --timeout that expired before a terminal state; exit 5.
 	CodeTimeout = "A2ACLI_ERR_TIMEOUT"
+	// CodeAuthRequired marks an agent that requires authorization the CLI could
+	// not obtain without user interaction. Exit 1.
+	CodeAuthRequired = "A2ACLI_ERR_AUTH_REQUIRED"
+	// CodeAuthFailed marks a failed authorization: discovery, sign-in, or a
+	// rejected credential. Exit 1.
+	CodeAuthFailed = "A2ACLI_ERR_AUTH_FAILED"
 	// CodeInternal marks an unexpected CLI-side failure, or any condition with
 	// no better code. Exit 1.
 	CodeInternal = "A2ACLI_ERR_INTERNAL"
@@ -79,6 +85,17 @@ const UsageHint = "if you are an agent, your a2a skill may be out of date — ru
 // Usage builds a usage error for invalid arguments, flags, or flag combinations.
 func Usage(msg string) *Error {
 	return &Error{Code: CodeUsage, Message: msg, Hint: UsageHint, Exit: 2}
+}
+
+// AuthRequired builds an error for an agent that requires authorization the CLI
+// could not obtain on its own, such as when sign-in is not allowed.
+func AuthRequired(msg, hint string, cause error) *Error {
+	return &Error{Code: CodeAuthRequired, Message: msg, Hint: hint, Exit: 1, err: cause}
+}
+
+// AuthFailed builds an error for a failed authorization attempt.
+func AuthFailed(msg string, cause error) *Error {
+	return &Error{Code: CodeAuthFailed, Message: msg, Exit: 1, err: cause}
 }
 
 // CardResolution builds an error for a failure to resolve an --agent-card.

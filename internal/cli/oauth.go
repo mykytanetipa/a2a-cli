@@ -1,0 +1,215 @@
+// Copyright 2026 The A2A Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cli
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/oauth"
+)
+
+// OAuth modes accepted by --oauth.
+const (
+	oauthAuto   = "auto"
+	oauthCached = "cached"
+	oauthOff    = "off"
+)
+
+// annotationAgentCall marks commands that call an agent, so a sign-in the
+// agent requires can run and the command can be retried.
+const annotationAgentCall = "a2a-cli/agent-call"
+
+// agentCall marks cmd as a command that calls an agent.
+func agentCall(cmd *cobra.Command) *cobra.Command {
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[annotationAgentCall] = "true"
+	return cmd
+}
+
+// initOAuth sets up the OAuth manager and wraps the HTTP transport, unless
+// --oauth is off.
+func (g *globalConfig) initOAuth(d deps) error {
+	switch g.oauthMode {
+	case oauthAuto, oauthCached:
+	case oauthOff:
+		return nil
+	default:
+		return clierr.Usage(fmt.Sprintf("invalid --oauth %q (want auto, cached or off)", g.oauthMode))
+	}
+	store, err := g.newOAuthStore(d)
+	if err != nil {
+		return err
+	}
+	base := g.httpTransport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	g.oauth = &oauth.Manager{
+		Clients:    g.oauthClients.Registrations(),
+		Store:      store,
+		HTTPClient: &http.Client{Transport: base},
+		Logf:       g.logf,
+	}
+	g.httpTransport = g.oauth.Transport(base)
+	return nil
+}
+
+func (g *globalConfig) newOAuthStore(d deps) (oauth.Store, error) {
+	dir := d.oauthDir
+	if dir == "" {
+		var err error
+		if dir, err = oauth.DefaultDir(); err != nil {
+			return nil, err
+		}
+	}
+	switch g.oauthStore {
+	case "", "file":
+		return &oauth.FileStore{Dir: dir}, nil
+	case "keychain":
+		kr := d.keyring
+		if kr == nil {
+			kr = oauth.SystemKeyring{}
+		}
+		return &oauth.KeyringStore{Index: &oauth.FileStore{Dir: dir}, Keyring: kr}, nil
+	default:
+		return nil, clierr.Usage(fmt.Sprintf("invalid --oauth-store %q (want file or keychain)", g.oauthStore))
+	}
+}
+
+// wrapSignIn makes every command marked with [agentCall] sign in when the agent
+// requires it and then run once more.
+func wrapSignIn(cfg *globalConfig, d deps, cmd *cobra.Command) {
+	if run := cmd.RunE; run != nil && cmd.Annotations[annotationAgentCall] != "" {
+		cmd.RunE = func(c *cobra.Command, args []string) error {
+			return cfg.withSignIn(c.Context(), d, func() error { return run(c, args) })
+		}
+	}
+	for _, sub := range cmd.Commands() {
+		wrapSignIn(cfg, d, sub)
+	}
+}
+
+// withSignIn runs fn. When fn fails because the agent requires an authorization
+// that has to be obtained interactively, it signs in, if allowed, and runs fn
+// once more. fn creates its own clients and --timeout contexts, so the retry
+// isn't limited by time spent signing in. A stream that already printed events
+// is not restarted.
+func (g *globalConfig) withSignIn(ctx context.Context, d deps, fn func() error) error {
+	before := g.eventsHandled
+	err := fn()
+	var ir *oauth.InteractionRequiredError
+	if !errors.As(err, &ir) {
+		return g.oauthError(err)
+	}
+	if g.eventsHandled != before {
+		return clierr.AuthRequired(
+			fmt.Sprintf("authorization for %s ended during the stream", ir.Requirement.Resource),
+			fmt.Sprintf("run `a2a auth login %s`, then follow the task with `a2a task subscribe <task-id>`", g.agentRef(ir)),
+			err)
+	}
+	if reason := g.signInBlocked(d); reason != "" {
+		return clierr.AuthRequired(
+			fmt.Sprintf("%s, and %s", ir.Error(), reason),
+			fmt.Sprintf("run `a2a auth login %s` (add --device on a machine without a browser)", g.agentRef(ir)),
+			err)
+	}
+	if _, err := g.signIn(ctx, d, ir.Requirement, oauth.AcquireOptions{}); err != nil {
+		return err
+	}
+	err = fn()
+	if errors.As(err, &ir) {
+		return clierr.AuthFailed(fmt.Sprintf("still not authorized after signing in: %v", err), err)
+	}
+	return g.oauthError(err)
+}
+
+// signInBlocked explains why an interactive sign-in can't start, or returns "".
+func (g *globalConfig) signInBlocked(d deps) string {
+	switch {
+	case g.oauthMode == oauthCached:
+		return "no usable stored grant was found (--oauth cached)"
+	case !d.authInteractive():
+		return "signing in needs a terminal"
+	default:
+		return ""
+	}
+}
+
+// signIn obtains a grant interactively. It is bounded by its own timeout, not
+// --timeout, and stops on Ctrl-C.
+func (g *globalConfig) signIn(ctx context.Context, d deps, req *oauth.Requirement, opts oauth.AcquireOptions) (*oauth.Grant, error) {
+	ctx, stop := d.notifyInterrupt(context.WithoutCancel(ctx))
+	defer stop()
+	ctx, cancel := context.WithTimeout(ctx, d.authTimeout)
+	defer cancel()
+
+	opts.Prompter = oauth.Prompter{Out: g.stderr(), Open: d.openURL}
+	opts.Sleep = d.authSleep
+	grant, err := g.oauth.Acquire(ctx, req, opts)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, clierr.AuthFailed(fmt.Sprintf("authorization of %s timed out after %s", req.Resource, d.authTimeout), err)
+		}
+		return nil, g.oauthError(fmt.Errorf("authorizing %s at %s: %w", req.Resource, req.Endpoints.Issuer, err))
+	}
+	if _, err := fmt.Fprintf(g.stderr(), "Authorized. Grant saved for %s.\n", grant.Key.Resource); err != nil {
+		return nil, err
+	}
+	return grant, nil
+}
+
+// oauthError classifies authorization failures; other errors pass through.
+func (g *globalConfig) oauthError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var nc *oauth.NoClientError
+	if errors.As(err, &nc) {
+		return clierr.Usage(nc.Error())
+	}
+	var ir *oauth.InteractionRequiredError
+	var fe *oauth.FailureError
+	var oe *oauth.Error
+	if errors.As(err, &ir) || errors.As(err, &fe) || errors.As(err, &oe) {
+		return clierr.AuthFailed(err.Error(), err)
+	}
+	return err
+}
+
+// agentRef is the agent reference to suggest in `a2a auth login` hints.
+func (g *globalConfig) agentRef(ir *oauth.InteractionRequiredError) string {
+	switch {
+	case g.agentCard.IsSet():
+		return g.agentCard.String()
+	case g.url != "":
+		return g.url
+	default:
+		return ir.Requirement.Resource
+	}
+}
+
+// stderrIsTerminal reports whether standard error is a terminal.
+func stderrIsTerminal() bool {
+	return isCharDevice(os.Stderr)
+}

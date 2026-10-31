@@ -169,6 +169,9 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 	if cfg.credentials != nil {
 		opts = append(opts, cfg.credentialInterceptor())
 	}
+	if cfg.oauth != nil {
+		opts = append(opts, a2aclient.WithCallInterceptors(cfg.oauth.Interceptor()))
+	}
 	if cfg.a2aVersion == "" || cfg.a2aVersion == "1.0" {
 		opts = append(
 			opts,
